@@ -1,0 +1,864 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =========================================================
+// ENUMS
+// =========================================================
+
+enum UserRole {
+  OWNER
+  ADMIN_TOKO
+  STAFF_GUDANG
+  KASIR
+  KURIR
+  SUPER_ADMIN
+}
+
+enum InstitutionType {
+  DAPUR_SPPG
+  KANTOR_PUSAT_SPPG
+  EVENT_ORGANIZER
+  LAINNYA
+}
+
+enum CustomerType {
+  RETAIL
+  INSTITUSI
+}
+
+enum SalesChannel {
+  ECOMMERCE
+  POS
+  WHATSAPP_B2B
+}
+
+enum OrderType {
+  B2C_ECER
+  B2B_GROSIR
+}
+
+enum DeliveryMethod {
+  PICKUP
+  DELIVERY
+}
+
+enum OrderStatus {
+  DRAFT
+  MENUNGGU_KONFIRMASI
+  DIKONFIRMASI
+  MENUNGGU_PENGADAAN
+  SIAP_KIRIM
+  DALAM_PENGIRIMAN
+  TERKIRIM_MENUNGGU_TTD
+  SELESAI
+  DIBATALKAN
+}
+
+enum FulfillmentStatus {
+  BELUM_DIPROSES
+  SEBAGIAN
+  LENGKAP
+}
+
+enum PaymentStatus {
+  BELUM_BAYAR
+  SEBAGIAN
+  MENUNGGU_VALIDASI
+  LUNAS
+  DITOLAK
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER_BANK
+  QRIS
+}
+
+enum StockMovementType {
+  MASUK_PEMBELIAN
+  MASUK_RETUR
+  MASUK_PENYESUAIAN
+  KELUAR_PENJUALAN
+  KELUAR_RETUR
+  KELUAR_PENYESUAIAN
+  KELUAR_KADALUWARSA
+}
+
+enum DocumentStatus {
+  DRAFT
+  DITERBITKAN
+  DITANDATANGANI_DAPUR
+  DITANDATANGANI_KANTOR_PUSAT
+  SELESAI
+  DIBATALKAN
+}
+
+enum SourcingStatus {
+  DIBUTUHKAN
+  SEDANG_DIBANDINGKAN
+  DIPUTUSKAN
+  DIBELI
+  DIBATALKAN
+}
+
+enum OperationalCostCategory {
+  BENSIN_PENGADAAN
+  BENSIN_PENGIRIMAN
+  PARKIR
+  RETRIBUSI
+  LAINNYA
+}
+
+enum AttachmentOwnerType {
+  SALES_ORDER
+  PURCHASE_ORDER
+  DELIVERY_NOTE
+  INVOICE
+  PAYMENT
+  STOCK_BATCH
+  GOODS_RECEIPT
+  OPERATIONAL_COST
+  SOURCING_REQUEST
+}
+
+// =========================================================
+// IDENTITY & ACCESS
+// =========================================================
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  name      String
+  email     String   @unique
+  phone     String?
+  role      UserRole
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesOrdersCreated    SalesOrder[]        @relation("SalesOrderCreatedBy")
+  purchaseOrdersCreated PurchaseOrder[]     @relation("PurchaseOrderCreatedBy")
+  stockMovements        StockMovement[]     @relation("StockMovementActor")
+  priceQuotesChecked    SupplierPriceQuote[] @relation("PriceQuoteChecker")
+  paymentsValidated     PaymentValidation[] @relation("PaymentValidator")
+  auditLogs             AuditLog[]          @relation("AuditActor")
+  attachmentsUploaded   Attachment[]        @relation("AttachmentUploader")
+  chatMessages          ChatMessage[]
+  aiQueryLogs           AIQueryLog[]
+
+  @@index([role])
+}
+
+// =========================================================
+// CUSTOMER (B2C) & INSTITUTION (B2B / SPPG MBG)
+// =========================================================
+
+model Customer {
+  id          String   @id @default(cuid())
+  clerkId     String?  @unique
+  name        String
+  phone       String   @unique
+  email       String?
+  isWalkIn    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addresses    CustomerAddress[]
+  salesOrders  SalesOrder[]
+  chatThreads  ChatThread[]
+  chatMessages ChatMessage[] @relation("CustomerSender")
+
+  @@index([phone])
+}
+
+model CustomerAddress {
+  id                       String   @id @default(cuid())
+  customerId               String
+  customer                 Customer @relation(fields: [customerId], references: [id])
+  label                    String
+  fullAddress              String   @db.Text
+  kecamatan                String
+  kota                     String   @default("Mojokerto")
+  latitude                 Float?
+  longitude                Float?
+  isWithinFreeDeliveryZone Boolean  @default(true)
+  isDefault                Boolean  @default(false)
+  createdAt                DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model Institution {
+  id                   String              @id @default(cuid())
+  name                 String
+  type                 InstitutionType
+  parentInstitutionId  String?
+  parentInstitution    Institution?        @relation("InstitutionHierarchy", fields: [parentInstitutionId], references: [id])
+  childInstitutions    Institution[]       @relation("InstitutionHierarchy")
+  address              String              @db.Text
+  isActive             Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  contacts        InstitutionContact[]
+  salesOrders     SalesOrder[]
+  priceAgreements CustomerProductAgreement[]
+
+  @@index([type])
+  @@index([parentInstitutionId])
+}
+
+model InstitutionContact {
+  id                String      @id @default(cuid())
+  institutionId     String
+  institution       Institution @relation(fields: [institutionId], references: [id])
+  name              String
+  role              String
+  phone             String
+  isPrimaryOrderer  Boolean     @default(false)
+  isSignatory       Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+
+  @@index([institutionId])
+}
+
+model CustomerProductAgreement {
+  id               String      @id @default(cuid())
+  institutionId    String
+  institution      Institution @relation(fields: [institutionId], references: [id])
+  productId        String
+  product          Product     @relation(fields: [productId], references: [id])
+  unitId           String
+  unit             ProductUnit @relation("AgreementUnit", fields: [unitId], references: [id])
+  priceCeiling     Decimal     @db.Decimal(14, 2)
+  averageWeeklyQty Decimal?    @db.Decimal(14, 2)
+  effectiveFrom    DateTime
+  effectiveUntil   DateTime?
+  notes            String?     @db.Text
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([institutionId, productId, unitId, effectiveFrom])
+  @@index([institutionId, productId])
+}
+
+// =========================================================
+// PRODUCT, CATEGORY, UNIT
+// =========================================================
+
+model ProductCategory {
+  id       String            @id @default(cuid())
+  name     String            @unique
+  parentId String?
+  parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryTree")
+  products Product[]
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  sku           String   @unique
+  name          String
+  categoryId    String
+  category      ProductCategory @relation(fields: [categoryId], references: [id])
+  baseUnitId    String
+  baseUnit      ProductUnit @relation("BaseUnit", fields: [baseUnitId], references: [id])
+  isPerishable  Boolean  @default(true)
+  minStockAlert Decimal  @db.Decimal(14, 2) @default(0)
+  isActive      Boolean  @default(true)
+  imageUrl      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  unitConversions    ProductUnitConversion[]
+  sellingPrices      ProductSellingPrice[]
+  supplierProducts   SupplierProduct[]
+  stockBatches       StockBatch[]
+  salesOrderItems    SalesOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  sourcingRequests   SourcingRequest[]
+  stockMovements     StockMovement[]
+  agreements         CustomerProductAgreement[]
+
+  @@index([categoryId])
+  @@fulltext([name])
+}
+
+model ProductUnit {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  productsAsBase     Product[]                  @relation("BaseUnit")
+  conversions        ProductUnitConversion[]
+  agreements         CustomerProductAgreement[] @relation("AgreementUnit")
+  sellingPrices      ProductSellingPrice[]
+  supplierProducts   SupplierProduct[]
+  salesOrderItems    SalesOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  sourcingRequests   SourcingRequest[]
+}
+
+model ProductUnitConversion {
+  id                String      @id @default(cuid())
+  productId         String
+  product           Product     @relation(fields: [productId], references: [id])
+  unitId            String
+  unit              ProductUnit @relation(fields: [unitId], references: [id])
+  conversionToBase  Decimal     @db.Decimal(14, 4)
+  isDefaultSellUnit Boolean     @default(false)
+  isDefaultBuyUnit  Boolean     @default(false)
+
+  @@unique([productId, unitId])
+}
+
+model ProductSellingPrice {
+  id             String       @id @default(cuid())
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id])
+  unitId         String
+  unit           ProductUnit  @relation(fields: [unitId], references: [id])
+  customerType   CustomerType
+  price          Decimal      @db.Decimal(14, 2)
+  effectiveFrom  DateTime     @default(now())
+  effectiveUntil DateTime?
+  isActive       Boolean      @default(true)
+
+  @@index([productId, customerType, isActive])
+}
+
+// =========================================================
+// SUPPLIER & DYNAMIC PRICING
+// =========================================================
+
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String
+  type          String
+  address       String?  @db.Text
+  phone         String?
+  contactPerson String?
+  notes         String?  @db.Text
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  supplierProducts SupplierProduct[]
+  purchaseOrders   PurchaseOrder[]
+
+  @@index([type])
+}
+
+model SupplierProduct {
+  id                  String   @id @default(cuid())
+  supplierId          String
+  supplier            Supplier @relation(fields: [supplierId], references: [id])
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id])
+  supplierSku         String?
+  supplierProductName String?
+  unitId              String
+  unit                ProductUnit @relation(fields: [unitId], references: [id])
+  isActive            Boolean  @default(true)
+
+  priceQuotes       SupplierPriceQuote[]
+  sourcingDecisions SourcingRequest[]     @relation("SourcingChosenSupplierProduct")
+
+  @@unique([supplierId, productId, unitId])
+  @@index([productId])
+}
+
+model SupplierPriceQuote {
+  id                 String   @id @default(cuid())
+  supplierProductId  String
+  supplierProduct    SupplierProduct @relation(fields: [supplierProductId], references: [id])
+  price              Decimal  @db.Decimal(14, 2)
+  isPromo            Boolean  @default(false)
+  checkedById        String
+  checkedBy          User     @relation("PriceQuoteChecker", fields: [checkedById], references: [id])
+  checkedAt          DateTime @default(now())
+  validUntil         DateTime?
+  sourcingRequestId  String?
+  sourcingRequest    SourcingRequest? @relation(fields: [sourcingRequestId], references: [id])
+  notes              String?  @db.Text
+
+  @@index([supplierProductId, checkedAt])
+  @@index([sourcingRequestId])
+}
+
+// =========================================================
+// PROCUREMENT / SOURCING
+// (pengadaan barang B2B yang belum ready stok)
+// =========================================================
+
+model SourcingRequest {
+  id                      String   @id @default(cuid())
+  salesOrderItemId        String   @unique
+  salesOrderItem          SalesOrderItem @relation(fields: [salesOrderItemId], references: [id])
+  productId               String
+  product                 Product  @relation(fields: [productId], references: [id])
+  qtyNeeded               Decimal  @db.Decimal(14, 2)
+  unitId                  String
+  unit                    ProductUnit @relation(fields: [unitId], references: [id])
+  deadline                DateTime
+  status                  SourcingStatus @default(DIBUTUHKAN)
+  chosenSupplierProductId String?
+  chosenSupplierProduct   SupplierProduct? @relation("SourcingChosenSupplierProduct", fields: [chosenSupplierProductId], references: [id])
+  decisionReason          String?  @db.Text
+  createdAt               DateTime @default(now())
+  decidedAt               DateTime?
+
+  priceQuotes        SupplierPriceQuote[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@index([status])
+  @@index([deadline])
+}
+
+model PurchaseOrder {
+  id           String   @id @default(cuid())
+  poNumber     String   @unique
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  purpose      String
+  status       String   @default("DRAFT")
+  totalAmount  Decimal  @db.Decimal(14, 2) @default(0)
+  createdById  String
+  createdBy    User     @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  purchasedAt  DateTime?
+
+  items            PurchaseOrderItem[]
+  goodsReceipts    GoodsReceipt[]
+  operationalCosts OperationalCost[]
+
+  @@index([supplierId])
+}
+
+model PurchaseOrderItem {
+  id                String   @id @default(cuid())
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  productId         String
+  product           Product  @relation(fields: [productId], references: [id])
+  sourcingRequestId String?
+  sourcingRequest   SourcingRequest? @relation(fields: [sourcingRequestId], references: [id])
+  unitId            String
+  unit              ProductUnit @relation(fields: [unitId], references: [id])
+  qty               Decimal  @db.Decimal(14, 2)
+  unitCost          Decimal  @db.Decimal(14, 2)
+  subtotal          Decimal  @db.Decimal(14, 2)
+
+  @@index([purchaseOrderId])
+  @@index([sourcingRequestId])
+}
+
+model GoodsReceipt {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  receivedAt      DateTime @default(now())
+  receivedById    String
+  notes           String?  @db.Text
+
+  stockBatches StockBatch[]
+
+  @@index([purchaseOrderId])
+}
+
+// =========================================================
+// INVENTORY (batch/expiry aware)
+// =========================================================
+
+model StockBatch {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id])
+  batchCode        String
+  goodsReceiptId   String?
+  goodsReceipt     GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
+  qtyReceivedBase  Decimal  @db.Decimal(14, 4)
+  qtyRemainingBase Decimal  @db.Decimal(14, 4)
+  unitCostBase     Decimal  @db.Decimal(14, 4)
+  expiryDate       DateTime?
+  receivedAt       DateTime @default(now())
+
+  stockMovements StockMovement[]
+
+  @@index([productId, expiryDate])
+  @@index([productId, qtyRemainingBase])
+}
+
+model StockMovement {
+  id                      String   @id @default(cuid())
+  productId               String
+  product                 Product  @relation(fields: [productId], references: [id])
+  stockBatchId            String?
+  stockBatch              StockBatch? @relation(fields: [stockBatchId], references: [id])
+  type                    StockMovementType
+  qtyBase                 Decimal  @db.Decimal(14, 4)
+  relatedSalesOrderItemId String?
+  relatedSalesOrderItem   SalesOrderItem? @relation(fields: [relatedSalesOrderItemId], references: [id])
+  actorId                 String
+  actor                   User     @relation("StockMovementActor", fields: [actorId], references: [id])
+  notes                   String?  @db.Text
+  createdAt               DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@index([relatedSalesOrderItemId])
+}
+
+// =========================================================
+// SALES ORDER (unified B2C + B2B)
+// =========================================================
+
+model SalesOrder {
+  id                  String   @id @default(cuid())
+  orderNumber         String   @unique
+  channel             SalesChannel
+  orderType           OrderType
+  customerId          String?
+  customer            Customer? @relation(fields: [customerId], references: [id])
+  institutionId       String?
+  institution         Institution? @relation(fields: [institutionId], references: [id])
+  deliveryMethod      DeliveryMethod
+  deliveryAddressText String?  @db.Text
+  deliveryLatitude    Float?
+  deliveryLongitude   Float?
+  isFreeDelivery      Boolean  @default(false)
+  requestedDeadline   DateTime?
+  status              OrderStatus @default(DRAFT)
+  fulfillmentStatus   FulfillmentStatus @default(BELUM_DIPROSES)
+  paymentStatus       PaymentStatus @default(BELUM_BAYAR)
+  subtotal            Decimal  @db.Decimal(14, 2) @default(0)
+  discountAmount      Decimal  @db.Decimal(14, 2) @default(0)
+  totalAmount         Decimal  @db.Decimal(14, 2) @default(0)
+  totalCostAmount     Decimal  @db.Decimal(14, 2) @default(0)
+  totalMarginAmount   Decimal  @db.Decimal(14, 2) @default(0)
+  createdById         String
+  createdBy           User     @relation("SalesOrderCreatedBy", fields: [createdById], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  items            SalesOrderItem[]
+  statusHistory    SalesOrderStatusHistory[]
+  deliveryNote     DeliveryNote?
+  invoice          Invoice?
+  payments         Payment[]
+  operationalCosts OperationalCost[]
+  chatThread       ChatThread?
+
+  @@index([orderType, status])
+  @@index([institutionId])
+  @@index([customerId])
+  @@index([requestedDeadline])
+}
+
+model SalesOrderItem {
+  id                   String   @id @default(cuid())
+  salesOrderId         String
+  salesOrder           SalesOrder @relation(fields: [salesOrderId], references: [id])
+  productId            String
+  product              Product  @relation(fields: [productId], references: [id])
+  unitId               String
+  unit                 ProductUnit @relation(fields: [unitId], references: [id])
+  qty                  Decimal  @db.Decimal(14, 2)
+  unitSellPrice        Decimal  @db.Decimal(14, 2)
+  unitCostPrice        Decimal  @db.Decimal(14, 2) @default(0)
+  subtotalSell         Decimal  @db.Decimal(14, 2)
+  subtotalCost         Decimal  @db.Decimal(14, 2) @default(0)
+  marginAmount         Decimal  @db.Decimal(14, 2) @default(0)
+  isAvailableFromStock Boolean  @default(true)
+  createdAt            DateTime @default(now())
+
+  sourcingRequest SourcingRequest?
+  stockMovements  StockMovement[]
+
+  @@index([salesOrderId])
+  @@index([productId])
+}
+
+model SalesOrderStatusHistory {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id])
+  fromStatus   OrderStatus?
+  toStatus     OrderStatus
+  changedById  String
+  note         String?  @db.Text
+  changedAt    DateTime @default(now())
+
+  @@index([salesOrderId, changedAt])
+}
+
+model OperationalCost {
+  id              String   @id @default(cuid())
+  category        OperationalCostCategory
+  amount          Decimal  @db.Decimal(14, 2)
+  salesOrderId    String?
+  salesOrder      SalesOrder? @relation(fields: [salesOrderId], references: [id])
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  incurredAt      DateTime @default(now())
+  notes           String?  @db.Text
+
+  @@index([salesOrderId])
+  @@index([purchaseOrderId])
+}
+
+// =========================================================
+// DOCUMENTS: SURAT JALAN & NOTA
+// =========================================================
+
+model DeliveryNote {
+  id                      String   @id @default(cuid())
+  documentNumber          String   @unique
+  salesOrderId            String   @unique
+  salesOrder              SalesOrder @relation(fields: [salesOrderId], references: [id])
+  status                  DocumentStatus @default(DRAFT)
+  issuedAt                DateTime?
+  kitchenSignatoryName    String?
+  kitchenSignedAt         DateTime?
+  kitchenCopyScanUrl      String?
+  headOfficeSignatoryName String?
+  headOfficeSignedAt      DateTime?
+  originalScanUrl         String?
+  notes                   String?  @db.Text
+  createdAt               DateTime @default(now())
+
+  items DeliveryNoteItem[]
+
+  @@index([status])
+}
+
+model DeliveryNoteItem {
+  id             String   @id @default(cuid())
+  deliveryNoteId String
+  deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id])
+  productName    String
+  qty            Decimal  @db.Decimal(14, 2)
+  unitName       String
+
+  @@index([deliveryNoteId])
+}
+
+model Invoice {
+  id                      String   @id @default(cuid())
+  documentNumber          String   @unique
+  salesOrderId            String   @unique
+  salesOrder              SalesOrder @relation(fields: [salesOrderId], references: [id])
+  status                  DocumentStatus @default(DRAFT)
+  totalAmount             Decimal  @db.Decimal(14, 2)
+  headOfficeSignatoryName String?
+  headOfficeSignedAt      DateTime?
+  disbursementStatus      String   @default("BELUM_CAIR")
+  disbursedAt             DateTime?
+  disbursementBankRef     String?
+  createdAt               DateTime @default(now())
+
+  payment Payment?
+
+  @@index([status])
+  @@index([disbursementStatus])
+}
+
+// =========================================================
+// PAYMENT
+// =========================================================
+
+model Payment {
+  id                 String   @id @default(cuid())
+  paymentNumber      String   @unique
+  salesOrderId       String
+  salesOrder         SalesOrder @relation(fields: [salesOrderId], references: [id])
+  invoiceId          String?  @unique
+  invoice            Invoice? @relation(fields: [invoiceId], references: [id])
+  method             PaymentMethod
+  amount             Decimal  @db.Decimal(14, 2)
+  status             PaymentStatus @default(BELUM_BAYAR)
+  requiresValidation Boolean  @default(false)
+  paidAt             DateTime?
+  proofFileUrl       String?
+  createdAt          DateTime @default(now())
+
+  validation PaymentValidation?
+
+  @@index([salesOrderId])
+  @@index([status])
+}
+
+model PaymentValidation {
+  id            String   @id @default(cuid())
+  paymentId     String   @unique
+  payment       Payment  @relation(fields: [paymentId], references: [id])
+  validatedById String
+  validatedBy   User     @relation("PaymentValidator", fields: [validatedById], references: [id])
+  isApproved    Boolean
+  reason        String?  @db.Text
+  validatedAt   DateTime @default(now())
+}
+
+// =========================================================
+// FINANCE / ACCOUNTING
+// =========================================================
+
+model ChartOfAccount {
+  id       String   @id @default(cuid())
+  code     String   @unique
+  name     String
+  type     String
+  parentId String?
+  parent   ChartOfAccount?  @relation("COATree", fields: [parentId], references: [id])
+  children ChartOfAccount[] @relation("COATree")
+  isActive Boolean  @default(true)
+
+  journalLines JournalLine[]
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  entryNumber String   @unique
+  date        DateTime @default(now())
+  description String
+  sourceType  String?
+  sourceId    String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  lines JournalLine[]
+
+  @@index([date])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String   @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id])
+  accountId      String
+  account        ChartOfAccount @relation(fields: [accountId], references: [id])
+  debit          Decimal  @db.Decimal(14, 2) @default(0)
+  credit         Decimal  @db.Decimal(14, 2) @default(0)
+  memo           String?
+
+  @@index([accountId])
+}
+
+// =========================================================
+// ATTACHMENTS (evidence: struk, bukti transfer, scan dokumen)
+// =========================================================
+
+model Attachment {
+  id            String   @id @default(cuid())
+  ownerType     AttachmentOwnerType
+  ownerId       String
+  fileName      String
+  fileUrl       String
+  fileType      String
+  mimeType      String
+  fileSizeBytes Int
+  description   String?
+  uploadedById  String
+  uploadedBy    User     @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+  uploadedAt    DateTime @default(now())
+
+  @@index([ownerType, ownerId])
+}
+
+// =========================================================
+// CHAT & NOTIFICATIONS
+// =========================================================
+
+model ChatThread {
+  id           String   @id @default(cuid())
+  salesOrderId String?  @unique
+  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  subject      String?
+  isClosed     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id               String   @id @default(cuid())
+  chatThreadId     String
+  chatThread       ChatThread @relation(fields: [chatThreadId], references: [id])
+  senderUserId     String?
+  senderUser       User?    @relation(fields: [senderUserId], references: [id])
+  senderCustomerId String?
+  senderCustomer   Customer? @relation("CustomerSender", fields: [senderCustomerId], references: [id])
+  body             String   @db.Text
+  attachmentUrl    String?
+  sentAt           DateTime @default(now())
+
+  @@index([chatThreadId, sentAt])
+}
+
+model NotificationLog {
+  id                  String   @id @default(cuid())
+  channel             String
+  recipientPhone      String
+  templateName        String
+  message             String   @db.Text
+  relatedSalesOrderId String?
+  status              String   @default("SENT")
+  sentAt              DateTime @default(now())
+
+  @@index([relatedSalesOrderId])
+}
+
+// =========================================================
+// AUDIT & DOCUMENT NUMBERING
+// =========================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  beforeData Json?
+  afterData  Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model DocumentSequence {
+  id           String @id @default(cuid())
+  documentType String
+  yearMonth    String
+  lastNumber   Int    @default(0)
+
+  @@unique([documentType, yearMonth])
+}
+
+// =========================================================
+// AI AGENT
+// =========================================================
+
+model AIQueryLog {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  prompt        String   @db.Text
+  generatedSql  String?  @db.Text
+  toolCallsJson Json?
+  resultSummary String?  @db.Text
+  isReadOnly    Boolean  @default(true)
+  executionMs   Int?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

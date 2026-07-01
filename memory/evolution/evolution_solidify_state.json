@@ -1,0 +1,158 @@
+{
+  "last_run": {
+    "run_id": "run_1782891638828",
+    "created_at": "2026-07-01T07:40:39.035Z",
+    "parent_event_id": null,
+    "selected_gene_id": null,
+    "selected_capsule_id": null,
+    "selector": {
+      "selected": null,
+      "reason": [
+        "no matching gene found; new gene may be required",
+        "signals: memory_missing, user_missing, session_logs_missing",
+        "drift_intensity: 0.577",
+        "selection_path: none"
+      ],
+      "alternatives": [],
+      "selectionPath": "none",
+      "memoryUsed": false
+    },
+    "signals": [
+      "memory_missing",
+      "user_missing",
+      "session_logs_missing"
+    ],
+    "mutation": {
+      "type": "Mutation",
+      "id": "mut_1782891638823",
+      "category": "innovate",
+      "trigger_signals": [
+        "memory_missing",
+        "user_missing",
+        "session_logs_missing"
+      ],
+      "target": "behavior:protocol",
+      "expected_effect": "explore new strategy combinations to escape local optimum",
+      "risk_level": "medium"
+    },
+    "mutation_id": "mut_1782891638823",
+    "personality_state": {
+      "type": "PersonalityState",
+      "rigor": 0.7,
+      "creativity": 0.8500000000000002,
+      "verbosity": 0.25,
+      "risk_tolerance": 0.4,
+      "obedience": 0.85
+    },
+    "personality_key": "rigor=0.7|creativity=0.9|verbosity=0.3|risk_tolerance=0.4|obedience=0.9",
+    "personality_known": false,
+    "personality_mutations": [
+      {
+        "type": "PersonalityMutation",
+        "param": "creativity",
+        "delta": 0.05,
+        "reason": "stagnation detected in reflection"
+      }
+    ],
+    "drift": false,
+    "selected_by": "selector",
+    "source_type": "reference",
+    "reused_asset_id": "sha256:4d05c7477fe8c46ddfdc9cd351920cc0f9fc6876045401fa3e09bb91f61bf442",
+    "reused_source_node": "node_615ad8c48a5155cc",
+    "reused_chain_id": null,
+    "baseline_untracked": [
+      ".env.example",
+      ".gitignore",
+      "README.md",
+      "app/(ecommerce)/cart/page.tsx",
+      "app/(ecommerce)/checkout/page.tsx",
+      "app/(ecommerce)/layout.tsx",
+      "app/(ecommerce)/orders/[id]/page.tsx",
+      "app/(ecommerce)/orders/page.tsx",
+      "app/(ecommerce)/page.tsx",
+      "app/(ecommerce)/products/[id]/page.tsx",
+      "app/(ecommerce)/products/page.tsx",
+      "app/globals.css",
+      "app/layout.tsx",
+      "assets/gep/candidates.jsonl",
+      "assets/gep/capsules.json",
+      "assets/gep/events.jsonl",
+      "assets/gep/failed_capsules.json",
+      "assets/gep/genes.json",
+      "assets/gep/genes.jsonl",
+      "components/ecommerce/CheckoutForm.tsx",
+      "components/ecommerce/Footer.tsx",
+      "components/ecommerce/Header.tsx",
+      "components/ecommerce/ProductCard.tsx",
+      "lib/prisma.ts",
+      "lib/services/delivery-note.service.ts",
+      "lib/services/inventory.service.ts",
+      "lib/services/invoice.service.ts",
+      "lib/services/payment.service.ts",
+      "lib/services/procurement.service.ts",
+      "lib/services/sales-order-calculations.ts",
+      "lib/services/sales-order.service.ts",
+      "lib/utils/cloudinary.ts",
+      "lib/utils/cn.ts",
+      "lib/utils/date.ts",
+      "lib/utils/decimal.ts",
+      "lib/utils/document-numbering.ts",
+      "memory/atp-autobuy-ack.json",
+      "memory/atp-autobuyer-ledger.json",
+      "memory/evolution/asset_call_log.jsonl",
+      "memory/evolution/cycle_progress.json",
+      "memory/evolution/evolution_solidify_state.json",
+      "memory/evolution/evolution_state.json",
+      "memory/evolution/idle_schedule_state.json",
+      "memory/evolution/memory_graph.jsonl",
+      "memory/evolution/memory_graph_state.json",
+      "memory/evolution/personality_state.json",
+      "memory/evolution/reflection_log.jsonl",
+      "memory/evolver_update_check.json",
+      "middleware.ts",
+      "next.config.js",
+      "package-lock.json",
+      "package.json",
+      "postcss.config.js",
+      "prisma/schema.prisma",
+      "prisma/seed.ts",
+      "tailwind.config.ts",
+      "tsconfig.json"
+    ],
+    "baseline_git_head": "f7b9f12edb6750bc47da3e3ed8ec789c5418d6bf",
+    "blast_radius_estimate": {
+      "files": 12,
+      "lines": 960
+    },
+    "strategy_policy": {
+      "name": "balanced",
+      "label": "Balanced",
+      "description": "Normal operation. Steady growth with stability.",
+      "forceInnovate": false,
+      "cautiousExecution": false,
+      "highRiskGene": false,
+      "repairStreak": 0,
+      "failureStreak": 0,
+      "blastRadiusMaxFiles": 12,
+      "directives": [
+        "Base strategy: Balanced (Normal operation. Steady growth with stability.)",
+        "Target max files for this cycle: 12."
+      ]
+    },
+    "active_task_id": null,
+    "active_task_title": null,
+    "worker_assignment_id": null,
+    "worker_pending": false,
+    "commitment_deadline": null,
+    "applied_lessons": [],
+    "hub_lessons": [],
+    "cycleId": "0014",
+    "initial_user_prompt": null
+  },
+  "last_solidify": {
+    "run_id": "run_1782891638828",
+    "rejected": true,
+    "reason": "loop_bridge_disabled_autoreject_no_rollback",
+    "timestamp": "2026-07-01T07:40:39.041Z"
+  }
+}

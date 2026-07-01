@@ -1,0 +1,386 @@
+import { prisma } from "@/lib/prisma";
+import {
+  SalesChannel,
+  OrderType,
+  OrderStatus,
+  FulfillmentStatus,
+  PaymentStatus,
+  DeliveryMethod,
+  Prisma,
+} from "@prisma/client";
+import { Decimal } from "decimal.js";
+import { toDecimal, addDecimal, multiplyDecimal } from "@/lib/utils/decimal";
+import { generateDocumentNumber } from "@/lib/utils/document-numbering";
+import { allocateStock, createSourcingRequestForShortage } from "./inventory.service";
+
+/**
+ * Sales Order Service
+ * Handles order creation, status updates, and order lifecycle management
+ * Supports both B2C (ecer) and B2B (grosir SPPG) orders
+ */
+
+export type CreateSalesOrderInput = {
+  channel: SalesChannel;
+  orderType: OrderType;
+  customerId?: string;
+  institutionId?: string;
+  deliveryMethod: DeliveryMethod;
+  deliveryAddressText?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  isFreeDelivery?: boolean;
+  requestedDeadline?: Date;
+  items: Array<{
+    productId: string;
+    unitId: string;
+    qty: number;
+    unitSellPrice: number;
+    baseUnitConversion: number;
+  }>;
+  createdById: string;
+};
+
+export type SalesOrderWithItems = Prisma.SalesOrderGetPayload<{
+  include: {
+    items: {
+      include: {
+        product: true;
+        unit: true;
+      };
+    };
+    customer: true;
+    institution: true;
+    createdBy: true;
+  };
+}>;
+
+/**
+ * Create new sales order dengan alokasi stok otomatis
+ */
+export async function createSalesOrder(
+  input: CreateSalesOrderInput
+): Promise<SalesOrderWithItems> {
+  const {
+    channel,
+    orderType,
+    customerId,
+    institutionId,
+    deliveryMethod,
+    deliveryAddressText,
+    deliveryLatitude,
+    deliveryLongitude,
+    isFreeDelivery,
+    requestedDeadline,
+    items,
+    createdById,
+  } = input;
+
+  // Generate order number
+  const orderNumber = await generateDocumentNumber("SALES_ORDER");
+
+  // Create order dalam transaction
+  const order = await prisma.$transaction(async (tx) => {
+    // 1. Create SalesOrder
+    const newOrder = await tx.salesOrder.create({
+      data: {
+        orderNumber,
+        channel,
+        orderType,
+        customerId,
+        institutionId,
+        deliveryMethod,
+        deliveryAddressText,
+        deliveryLatitude,
+        deliveryLongitude,
+        isFreeDelivery: isFreeDelivery ?? false,
+        requestedDeadline,
+        status: OrderStatus.DRAFT,
+        fulfillmentStatus: FulfillmentStatus.BELUM_DIPROSES,
+        paymentStatus: PaymentStatus.BELUM_BAYAR,
+        subtotal: 0,
+        discountAmount: 0,
+        totalAmount: 0,
+        totalCostAmount: 0,
+        totalMarginAmount: 0,
+        createdById,
+      },
+    });
+
+    let subtotal = toDecimal(0);
+    let totalCost = toDecimal(0);
+    let allItemsAvailable = true;
+
+    // 2. Create order items dan allocate stock
+    for (const item of items) {
+      const itemSubtotal = multiplyDecimal(item.qty, item.unitSellPrice);
+      subtotal = addDecimal(subtotal, itemSubtotal);
+
+      // Create sales order item
+      const orderItem = await tx.salesOrderItem.create({
+        data: {
+          salesOrderId: newOrder.id,
+          productId: item.productId,
+          unitId: item.unitId,
+          qty: item.qty,
+          unitSellPrice: item.unitSellPrice,
+          subtotalSell: itemSubtotal.toNumber(),
+          unitCostPrice: 0,
+          subtotalCost: 0,
+          marginAmount: 0,
+          isAvailableFromStock: false, // will be updated by allocation
+        },
+      });
+
+      // Allocate stock
+      const allocationResult = await allocateStock({
+        productId: item.productId,
+        qtyNeeded: item.qty,
+        salesOrderItemId: orderItem.id,
+        actorId: createdById,
+        baseUnitConversion: item.baseUnitConversion,
+      });
+
+      // Update order item dengan cost info
+      const marginAmount = multiplyDecimal(item.qty, item.unitSellPrice).minus(
+        allocationResult.totalCost
+      );
+
+      await tx.salesOrderItem.update({
+        where: { id: orderItem.id },
+        data: {
+          unitCostPrice: allocationResult.unitCostPrice.toNumber(),
+          subtotalCost: allocationResult.totalCost.toNumber(),
+          marginAmount: marginAmount.toNumber(),
+          isAvailableFromStock: allocationResult.allocated,
+        },
+      });
+
+      totalCost = addDecimal(totalCost, allocationResult.totalCost);
+
+      // Jika tidak tersedia, tandai untuk sourcing
+      if (!allocationResult.allocated && allocationResult.needsSourcing) {
+        allItemsAvailable = false;
+
+        // Create sourcing request
+        const deadline = requestedDeadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await createSourcingRequestForShortage(
+          orderItem.id,
+          item.productId,
+          item.unitId,
+          allocationResult.remainingQty,
+          deadline
+        );
+      }
+    }
+
+    // 3. Update order totals
+    const totalAmount = subtotal; // bisa dikurangi discount jika ada
+    const totalMargin = subtotal.minus(totalCost);
+
+    await tx.salesOrder.update({
+      where: { id: newOrder.id },
+      data: {
+        subtotal: subtotal.toNumber(),
+        totalAmount: totalAmount.toNumber(),
+        totalCostAmount: totalCost.toNumber(),
+        totalMarginAmount: totalMargin.toNumber(),
+        status: allItemsAvailable ? OrderStatus.MENUNGGU_KONFIRMASI : OrderStatus.DRAFT,
+      },
+    });
+
+    // 4. Create status history
+    await tx.salesOrderStatusHistory.create({
+      data: {
+        salesOrderId: newOrder.id,
+        fromStatus: null,
+        toStatus: allItemsAvailable ? OrderStatus.MENUNGGU_KONFIRMASI : OrderStatus.DRAFT,
+        changedById: createdById,
+        note: "Order created",
+      },
+    });
+
+    // Return order dengan relasi
+    return tx.salesOrder.findUniqueOrThrow({
+      where: { id: newOrder.id },
+      include: {
+        items: {
+          include: {
+            product: true,
+            unit: true,
+          },
+        },
+        customer: true,
+        institution: true,
+        createdBy: true,
+      },
+    });
+  });
+
+  return order;
+}
+
+/**
+ * Update order status dengan validasi state machine
+ */
+export async function updateOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus,
+  changedById: string,
+  note?: string
+): Promise<void> {
+  const order = await prisma.salesOrder.findUniqueOrThrow({
+    where: { id: orderId },
+  });
+
+  // Validate state transition
+  if (!isValidStatusTransition(order.status, newStatus)) {
+    throw new Error(
+      `Invalid status transition from ${order.status} to ${newStatus}`
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Update order status
+    await tx.salesOrder.update({
+      where: { id: orderId },
+      data: { status: newStatus },
+    });
+
+    // Record status history
+    await tx.salesOrderStatusHistory.create({
+      data: {
+        salesOrderId: orderId,
+        fromStatus: order.status,
+        toStatus: newStatus,
+        changedById,
+        note,
+      },
+    });
+  });
+}
+
+/**
+ * Validate status transitions berdasarkan state machine (Section 7.1 spec)
+ */
+function isValidStatusTransition(from: OrderStatus, to: OrderStatus): boolean {
+  const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+    [OrderStatus.DRAFT]: [OrderStatus.MENUNGGU_KONFIRMASI, OrderStatus.DIBATALKAN],
+    [OrderStatus.MENUNGGU_KONFIRMASI]: [OrderStatus.DIKONFIRMASI, OrderStatus.DIBATALKAN],
+    [OrderStatus.DIKONFIRMASI]: [
+      OrderStatus.MENUNGGU_PENGADAAN,
+      OrderStatus.SIAP_KIRIM,
+      OrderStatus.DIBATALKAN,
+    ],
+    [OrderStatus.MENUNGGU_PENGADAAN]: [OrderStatus.SIAP_KIRIM],
+    [OrderStatus.SIAP_KIRIM]: [OrderStatus.DALAM_PENGIRIMAN],
+    [OrderStatus.DALAM_PENGIRIMAN]: [OrderStatus.TERKIRIM_MENUNGGU_TTD, OrderStatus.SELESAI],
+    [OrderStatus.TERKIRIM_MENUNGGU_TTD]: [OrderStatus.SELESAI],
+    [OrderStatus.SELESAI]: [],
+    [OrderStatus.DIBATALKAN]: [],
+  };
+
+  return validTransitions[from]?.includes(to) ?? false;
+}
+
+/**
+ * Update fulfillment status
+ */
+export async function updateFulfillmentStatus(
+  orderId: string,
+  status: FulfillmentStatus
+): Promise<void> {
+  await prisma.salesOrder.update({
+    where: { id: orderId },
+    data: { fulfillmentStatus: status },
+  });
+}
+
+/**
+ * Update payment status
+ */
+export async function updatePaymentStatus(
+  orderId: string,
+  status: PaymentStatus
+): Promise<void> {
+  await prisma.salesOrder.update({
+    where: { id: orderId },
+    data: { paymentStatus: status },
+  });
+}
+
+/**
+ * Get order by ID dengan semua relasi
+ */
+export async function getSalesOrderById(orderId: string): Promise<SalesOrderWithItems | null> {
+  return prisma.salesOrder.findUnique({
+    where: { id: orderId },
+    include: {
+      items: {
+        include: {
+          product: true,
+          unit: true,
+          sourcingRequest: true,
+        },
+      },
+      customer: true,
+      institution: true,
+      createdBy: true,
+      statusHistory: {
+        orderBy: { changedAt: "desc" },
+      },
+      deliveryNote: true,
+      invoice: true,
+      payments: true,
+      operationalCosts: true,
+    },
+  });
+}
+
+/**
+ * Get orders by filters
+ */
+export async function getSalesOrders(filters: {
+  status?: OrderStatus;
+  orderType?: OrderType;
+  customerId?: string;
+  institutionId?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  limit?: number;
+  offset?: number;
+}) {
+  const where: Prisma.SalesOrderWhereInput = {};
+
+  if (filters.status) where.status = filters.status;
+  if (filters.orderType) where.orderType = filters.orderType;
+  if (filters.customerId) where.customerId = filters.customerId;
+  if (filters.institutionId) where.institutionId = filters.institutionId;
+  if (filters.dateFrom || filters.dateTo) {
+    where.createdAt = {};
+    if (filters.dateFrom) where.createdAt.gte = filters.dateFrom;
+    if (filters.dateTo) where.createdAt.lte = filters.dateTo;
+  }
+
+  const [orders, total] = await Promise.all([
+    prisma.salesOrder.findMany({
+      where,
+      include: {
+        customer: true,
+        institution: true,
+        items: {
+          select: {
+            id: true,
+            qty: true,
+            unitSellPrice: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: filters.limit || 50,
+      skip: filters.offset || 0,
+    }),
+    prisma.salesOrder.count({ where }),
+  ]);
+
+  return { orders, total };
+}
