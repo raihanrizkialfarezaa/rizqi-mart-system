@@ -7,13 +7,14 @@ import { id } from "date-fns/locale";
 
 type NotificationItem = {
   id: string;
-  templateName: string;
+  type: string;
+  title: string;
   message: string;
-  channel: string;
-  recipientPhone: string;
-  relatedSalesOrderId: string | null;
-  status: string;
-  sentAt: string;
+  link: string | null;
+  priority: string;
+  isRead: boolean;
+  createdAt: string;
+  relatedOrderId: string | null;
 };
 
 export default function NotificationDropdown() {
@@ -27,7 +28,7 @@ export default function NotificationDropdown() {
     setLoading(true);
     fetch("/api/notifications")
       .then((res) => res.json())
-      .then(setNotifications)
+      .then((json) => setNotifications(json.data || []))
       .finally(() => setLoading(false));
   }, [open]);
 
@@ -43,7 +44,7 @@ export default function NotificationDropdown() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  const unreadCount = notifications.filter((n) => n.status === "SENT").length;
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -85,40 +86,43 @@ export default function NotificationDropdown() {
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-100">
-                  {notifications.map((n) => (
-                    <li key={n.id} className="px-4 py-3 transition-colors hover:bg-gray-50">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-900">
-                            {n.templateName}
-                          </p>
-                          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
-                            {n.message}
-                          </p>
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-400">
-                            <Clock className="h-3 w-3" />
-                            <span>
-                              {formatDistanceToNow(new Date(n.sentAt), {
-                                addSuffix: true,
-                                locale: id,
-                              })}
-                            </span>
-                            <span className="text-gray-300">|</span>
-                            <span>{n.channel}</span>
+                  {notifications.map((n) => {
+                    const targetLink = n.link || (n.relatedOrderId ? `/erp/orders/${n.relatedOrderId}` : null);
+                    return (
+                      <li key={n.id} className="px-4 py-3 transition-colors hover:bg-gray-50">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-gray-900">
+                              {n.title}
+                            </p>
+                            <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+                              {n.message}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-400">
+                              <Clock className="h-3 w-3" />
+                              <span>
+                                {formatDistanceToNow(new Date(n.createdAt), {
+                                  addSuffix: true,
+                                  locale: id,
+                                })}
+                              </span>
+                              <span className="text-gray-300">|</span>
+                              <span>{n.type}</span>
+                            </div>
                           </div>
+                          {targetLink && (
+                            <a
+                              href={targetLink}
+                              className="mt-0.5 shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-primary"
+                              title="Buka tautan"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
                         </div>
-                        {n.relatedSalesOrderId && (
-                          <a
-                            href={`/erp/orders/${n.relatedSalesOrderId}`}
-                            className="mt-0.5 shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-primary"
-                            title="Lihat pesanan"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
