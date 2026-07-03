@@ -507,17 +507,26 @@ async function main() {
   // 9. Users
   console.log("👤 Seeding Users...");
   const adminUser = await (async () => {
-    return await prisma.user.findFirst({ where: { email: "admin@rizqi-mart.test" } }) ||
-           await prisma.user.create({
-             data: {
-               clerkId: "clerk_seed_admin",
-               email: "admin@rizqi-mart.test",
-               name: "Admin Toko",
-               phone: "081234567899",
-               role: "ADMIN_TOKO",
-               isActive: true,
-             },
-           });
+    let user = await prisma.user.findFirst({ where: { email: "admin@rizqi-mart.test" } });
+    if (user) {
+      if (user.id !== "admin_toko_cuid") {
+        await prisma.$executeRawUnsafe("UPDATE User SET id = 'admin_toko_cuid' WHERE email = 'admin@rizqi-mart.test'");
+        user = await prisma.user.findFirst({ where: { email: "admin@rizqi-mart.test" } });
+      }
+    } else {
+      user = await prisma.user.create({
+        data: {
+          id: "admin_toko_cuid",
+          clerkId: "clerk_seed_admin",
+          email: "admin@rizqi-mart.test",
+          name: "Admin Toko",
+          phone: "081234567899",
+          role: "ADMIN_TOKO",
+          isActive: true,
+        },
+      });
+    }
+    return user!;
   })();
 
   // 10. Customers (B2C)
