@@ -83,6 +83,7 @@ export default function OrderBuilder() {
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState<"PAGI" | "SIANG" | "SORE" | "CUSTOM" | "">("");
   const [deliveryTime, setDeliveryTime] = useState("");
+  const [createdOrder, setCreatedOrder] = useState<any>(null);
   const [productRequests, setProductRequests] = useState<Array<{
     productName: string;
     requestedQty: number;
@@ -305,18 +306,25 @@ export default function OrderBuilder() {
       }
 
       setSuccess(`Pesanan ${json.data?.orderNumber || ""} berhasil dibuat!`);
-      setCart([]);
-      setSelectedInstitutionId("");
-      setProductRequests([]);
-
-      setTimeout(() => {
-        router.push("/erp/orders");
-      }, 1500);
+      setCreatedOrder(json.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal membuat pesanan");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleResetForm() {
+    setCart([]);
+    setSelectedInstitutionId("");
+    setDeliveryDate("");
+    setDeliveryTimeSlot("");
+    setDeliveryTime("");
+    setProductRequests([]);
+    setError(null);
+    setSuccess(null);
+    setCreatedOrder(null);
+    loadProducts("");
   }
 
   return (
@@ -767,6 +775,110 @@ export default function OrderBuilder() {
           <p className="mt-2 text-sm text-gray-500">
             Tidak ada produk tersedia
           </p>
+        </div>
+      )}
+
+      {/* Success Summary Modal */}
+      {createdOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
+                <Check className="h-8 w-8 stroke-[3]" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Pesanan Berhasil Dibuat!</h3>
+              <p className="text-sm text-gray-500 mt-1">Order baru telah sukses masuk ke sistem.</p>
+            </div>
+
+            {/* Order Details Card */}
+            <div className="rounded-xl bg-gray-50 p-4 border border-gray-100 mb-6 space-y-3">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-xs text-gray-400 block uppercase font-semibold tracking-wider">No. Order</span>
+                  <span className="font-bold text-gray-900">{createdOrder.orderNumber}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block uppercase font-semibold tracking-wider">Pelanggan / Dapur</span>
+                  <span className="font-semibold text-gray-900">
+                    {createdOrder.institution?.name || createdOrder.customer?.name || "Walk-in"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 block uppercase font-semibold tracking-wider">Tipe Pesanan</span>
+                  <span className="font-medium text-gray-700">
+                    {createdOrder.orderType === "B2B_GROSIR" ? "B2B Grosir" : "B2C Ecer"}
+                  </span>
+                </div>
+                {createdOrder.requestedDeliveryDate && (
+                  <div>
+                    <span className="text-xs text-gray-400 block uppercase font-semibold tracking-wider">Jadwal Pengiriman</span>
+                    <span className="font-medium text-gray-700">
+                      {new Date(createdOrder.requestedDeliveryDate).toLocaleDateString("id-ID", {
+                        weekday: "long", day: "numeric", month: "long"
+                      })}
+                      {createdOrder.requestedDeliveryTime && ` • ${createdOrder.requestedDeliveryTime}`}
+                      {createdOrder.deliveryTimeSlot && ` (${createdOrder.deliveryTimeSlot})`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="border rounded-lg overflow-hidden mb-6">
+              <div className="bg-gray-50 px-4 py-2 text-xs font-bold text-gray-700 border-b">Daftar Item Pesanan</div>
+              <div className="divide-y max-h-40 overflow-y-auto">
+                {cart.map((item) => (
+                  <div key={item.id} className="flex justify-between items-center px-4 py-2 text-sm">
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="font-medium text-gray-900 truncate">{item.product.name}</p>
+                      <p className="text-xs text-gray-500">{item.product.sku}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-900">{formatCurrency(item.subtotal)}</p>
+                      <p className="text-xs text-gray-400">{item.qty} {item.unit.code} x {formatCurrency(item.unitSellPrice)}</p>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Custom requests */}
+                {productRequests.map((req, idx) => (
+                  <div key={idx} className="flex justify-between items-center px-4 py-2 text-sm bg-amber-50/50">
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="font-medium text-amber-900 truncate">⭐ [Produk Baru] {req.productName}</p>
+                      {req.notes && <p className="text-xs text-amber-700 italic">Catatan: {req.notes}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-amber-800">Menunggu Review</p>
+                      <p className="text-xs text-amber-600">{req.requestedQty} {req.requestedUnit}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-gray-50 px-4 py-3 flex justify-between items-center text-sm font-bold text-gray-900 border-t">
+                <span>Total</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => router.push(`/erp/orders/${createdOrder.id}`)}
+                className="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-semibold hover:bg-primary/95 text-center transition-all shadow-md active:scale-[0.98]"
+              >
+                Lihat Detail Pesanan
+              </button>
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="flex-1 rounded-lg border border-gray-300 bg-white text-gray-700 py-2.5 text-sm font-semibold hover:bg-gray-50 text-center transition-all active:scale-[0.98]"
+              >
+                Buat Pesanan Lain
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
