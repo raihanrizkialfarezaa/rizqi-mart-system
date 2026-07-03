@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { createSalesOrder, CreateSalesOrderInput } from "@/lib/services/sales-order.service";
 import { SalesChannel, OrderType, DeliveryMethod } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId: clerkId } = auth();
-    if (!clerkId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -30,12 +30,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Minimal satu item diperlukan" }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId },
-      select: { id: true },
-    });
-    if (!user) {
-      return NextResponse.json({ error: "User tidak ditemukan" }, { status: 403 });
+    let dapurIdentityId = body.dapurIdentityId;
+    if (!dapurIdentityId && body.institutionId) {
+      const identity = await prisma.dapurIdentity.findUnique({
+        where: { institutionId: body.institutionId }
+      });
+      dapurIdentityId = identity?.id || undefined;
     }
 
     const input: CreateSalesOrderInput = {
@@ -43,6 +43,12 @@ export async function POST(req: NextRequest) {
       orderType,
       customerId: body.customerId || undefined,
       institutionId: body.institutionId || undefined,
+      dapurIdentityId,
+      entryMethod: body.entryMethod || "ADMIN_INPUT",
+      requestedDeliveryDate: body.requestedDeliveryDate ? new Date(body.requestedDeliveryDate) : undefined,
+      requestedDeliveryTime: body.requestedDeliveryTime || undefined,
+      deliveryTimeSlot: body.deliveryTimeSlot || undefined,
+      customerNote: body.customerNote || undefined,
       deliveryMethod,
       deliveryAddressText: body.deliveryAddressText || undefined,
       deliveryLatitude: body.deliveryLatitude || undefined,
@@ -56,10 +62,28 @@ export async function POST(req: NextRequest) {
         unitSellPrice: item.unitSellPrice,
         baseUnitConversion: item.baseUnitConversion || 1,
       })),
-      createdById: user.id,
+      createdById: session.id,
     };
 
     const order = await createSalesOrder(input);
+
+    if (body.productRequests && Array.isArray(body.productRequests)) {
+      for (const req of body.productRequests) {
+        if (req.productName) {
+          await prisma.productRequest.create({
+            data: {
+              salesOrderId: order.id,
+              dapurIdentityId,
+              productName: req.productName,
+              requestedQty: req.requestedQty || 1,
+              requestedUnit: req.requestedUnit || "PCS",
+              notes: req.notes || null,
+              status: "PENDING",
+            },
+          });
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, data: order }, { status: 201 });
   } catch (err) {

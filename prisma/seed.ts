@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, CustomerType } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -161,56 +161,141 @@ async function main() {
     })(),
   ]);
 
-  // 5. Institution (SPPG Example)
-  console.log("🏢 Seeding Institutions...");
-  const kantorPusat = await (async () => {
-    return await prisma.institution.findFirst({ where: { name: "Kantor Pusat Yayasan SPPG" } }) ||
-           await prisma.institution.create({
-             data: {
-               name: "Kantor Pusat Yayasan SPPG",
-               type: "KANTOR_PUSAT_SPPG",
-               address: "Jakarta",
-               contacts: {
-                 create: [
-                   {
-                     name: "Admin Kantor Pusat",
-                     role: "Admin",
-                     phone: "021-12345678",
-                     isSignatory: true,
-                   },
-                 ],
-               },
-             },
-           });
-  })();
+  // =========================================================
+  // 5. Institution with Hierarchy (Yayasan → Dapur SPPG)
+  // =========================================================
+  console.log("🏢 Seeding Institutions with Hierarchy...");
 
-  const dapurSooko = await (async () => {
-    return await prisma.institution.findFirst({ where: { name: "SPPG Dapur Sooko" } }) ||
-           await prisma.institution.create({
-             data: {
-               name: "SPPG Dapur Sooko",
-               type: "DAPUR_SPPG",
-               address: "Sooko, Mojokerto",
-               parentInstitutionId: kantorPusat.id,
-               contacts: {
-                 create: [
-                   {
-                     name: "Admin Dapur Sooko",
-                     role: "Admin Dapur",
-                     phone: "081234560001",
-                     isPrimaryOrderer: true,
-                   },
-                   {
-                     name: "Kepala Dapur Sooko",
-                     role: "Kepala Dapur",
-                     phone: "081234560002",
-                     isSignatory: true,
-                   },
-                 ],
-               },
-             },
-           });
-  })();
+  async function findOrCreateInstitution(data: {
+    name: string;
+    type: "DAPUR_SPPG" | "KANTOR_PUSAT_SPPG" | "EVENT_ORGANIZER" | "LAINNYA";
+    address: string;
+    parentInstitutionId?: string | null;
+  }) {
+    const existing = await prisma.institution.findFirst({ where: { name: data.name } });
+    if (existing) {
+      return await prisma.institution.update({
+        where: { id: existing.id },
+        data: { address: data.address, parentInstitutionId: data.parentInstitutionId ?? null },
+      });
+    }
+    return await prisma.institution.create({
+      data: {
+        name: data.name,
+        type: data.type,
+        address: data.address,
+        parentInstitutionId: data.parentInstitutionId ?? null,
+      },
+    });
+  }
+
+  // --- Clean old contacts for seeded dapurs ---
+  const seedDapurNames = ["SPPG Dapur Sooko", "SPPG Dapur Kuwung", "SPPG Dapur Gedeg", "SPPG Dapur Blooto", "SPPG Dapur Waru"];
+  for (const name of seedDapurNames) {
+    const inst = await prisma.institution.findFirst({ where: { name } });
+    if (inst) {
+      await prisma.institutionContact.deleteMany({ where: { institutionId: inst.id } });
+    }
+  }
+
+  // --- Yayasan SPPG ---
+  const kantorPusatSPPG = await findOrCreateInstitution({
+    name: "Kantor Pusat Yayasan SPPG",
+    type: "KANTOR_PUSAT_SPPG",
+    address: "Jl. Raya Mojokerto No. 123, Mojokerto, Jawa Timur",
+    parentInstitutionId: null,
+  });
+
+  const dapurSooko = await findOrCreateInstitution({
+    name: "SPPG Dapur Sooko",
+    type: "DAPUR_SPPG",
+    address: "Desa Sooko, Kec. Sooko, Mojokerto",
+    parentInstitutionId: kantorPusatSPPG.id,
+  });
+
+  const dapurKuwung = await findOrCreateInstitution({
+    name: "SPPG Dapur Kuwung",
+    type: "DAPUR_SPPG",
+    address: "Desa Kuwung, Kec. Kuwung, Mojokerto",
+    parentInstitutionId: kantorPusatSPPG.id,
+  });
+
+  const dapurGedeg = await findOrCreateInstitution({
+    name: "SPPG Dapur Gedeg",
+    type: "DAPUR_SPPG",
+    address: "Desa Gedeg, Kec. Gedeg, Mojokerto",
+    parentInstitutionId: kantorPusatSPPG.id,
+  });
+
+  // --- Yayasan Makmur ---
+  const kantorPusatMakmur = await findOrCreateInstitution({
+    name: "Kantor Pusat Yayasan Makmur",
+    type: "KANTOR_PUSAT_SPPG",
+    address: "Jl. Blooto Raya No. 45, Surabaya, Jawa Timur",
+    parentInstitutionId: null,
+  });
+
+  const dapurBlooto = await findOrCreateInstitution({
+    name: "SPPG Dapur Blooto",
+    type: "DAPUR_SPPG",
+    address: "Desa Blooto, Kec. Tambaksari, Surabaya",
+    parentInstitutionId: kantorPusatMakmur.id,
+  });
+
+  const dapurWaru = await findOrCreateInstitution({
+    name: "SPPG Dapur Waru",
+    type: "DAPUR_SPPG",
+    address: "Desa Waru, Kec. Waru, Sidoarjo",
+    parentInstitutionId: kantorPusatMakmur.id,
+  });
+
+  // --- Contacts for each Dapur ---
+  async function createContact(instId: string, data: { name: string; role: string; phone: string; isPrimaryOrderer?: boolean; isSignatory?: boolean }) {
+    await prisma.institutionContact.create({ data: { ...data, institutionId: instId } });
+  }
+
+  await createContact(dapurSooko.id, { name: "Ibu Siti Aminah", role: "Primary Orderer", phone: "081234560001", isPrimaryOrderer: true });
+  await createContact(dapurSooko.id, { name: "Pak Budi Santoso", role: "Manager Dapur", phone: "081234560002", isSignatory: true });
+
+  await createContact(dapurKuwung.id, { name: "Ibu Ratna Dewi", role: "Primary Orderer", phone: "082345678901", isPrimaryOrderer: true });
+  await createContact(dapurKuwung.id, { name: "Pak Ahmad Syarif", role: "Kepala Dapur", phone: "082345678902", isSignatory: true });
+
+  await createContact(dapurGedeg.id, { name: "Ibu Lestari", role: "Primary Orderer", phone: "083456789011", isPrimaryOrderer: true });
+
+  await createContact(dapurBlooto.id, { name: "Ibu Kartini", role: "Primary Orderer", phone: "084567890121", isPrimaryOrderer: true });
+  await createContact(dapurBlooto.id, { name: "Pak Joko Susilo", role: "Kepala Dapur", phone: "084567890122", isSignatory: true });
+
+  await createContact(dapurWaru.id, { name: "Ibu Endang", role: "Primary Orderer", phone: "086789012341", isPrimaryOrderer: true });
+
+  // --- Dapur Identities (for Customer Portal) ---
+  console.log("🆔 Seeding Dapur Identities...");
+  const identities = [
+    { inst: dapurSooko, displayName: "SPPG Dapur Sooko", desc: "Dapur utama di Sooko, Mojokerto", contact: "Ibu Siti Aminah", phone: "081234560001", addr: "Desa Sooko, Kec. Sooko, Mojokerto" },
+    { inst: dapurKuwung, displayName: "SPPG Dapur Kuwung", desc: "Dapur di Kuwung, Mojokerto", contact: "Ibu Ratna Dewi", phone: "082345678901", addr: "Desa Kuwung, Kec. Kuwung, Mojokerto" },
+    { inst: dapurGedeg, displayName: "SPPG Dapur Gedeg", desc: "Dapur di Gedeg, Mojokerto", contact: "Ibu Lestari", phone: "083456789011", addr: "Desa Gedeg, Kec. Gedeg, Mojokerto" },
+    { inst: dapurBlooto, displayName: "SPPG Dapur Blooto", desc: "Dapur di Blooto, Surabaya — Yayasan Makmur", contact: "Ibu Kartini", phone: "084567890121", addr: "Desa Blooto, Kec. Tambaksari, Surabaya" },
+    { inst: dapurWaru, displayName: "SPPG Dapur Waru", desc: "Dapur di Waru, Sidoarjo — Yayasan Makmur", contact: "Ibu Endang", phone: "086789012341", addr: "Desa Waru, Kec. Waru, Sidoarjo" },
+  ];
+
+  for (const { inst, displayName, desc, contact, phone, addr } of identities) {
+    const existingIdentity = await prisma.dapurIdentity.findUnique({ where: { institutionId: inst.id } });
+    if (!existingIdentity) {
+      const seedUser = await prisma.user.findFirst({ where: { email: "admin@rizqi-mart.test" } });
+      await prisma.dapurIdentity.create({
+        data: {
+          institutionId: inst.id,
+          displayName,
+          description: desc,
+          primaryContact: contact,
+          contactPhone: phone,
+          contactEmail: null,
+          deliveryAddress: addr,
+          isActive: true,
+          createdById: seedUser?.id || "seed_default",
+        },
+      });
+    }
+  }
 
   // 6. Products dengan stock
   console.log("🥛 Seeding Products with Stock...");
@@ -268,8 +353,8 @@ async function main() {
         } : undefined,
         sellingPrices: {
           create: [
-            { unitId: sellUnit.id, customerType: "INSTITUSI", price: opts.sellPrice, effectiveFrom: new Date() },
-            ...(opts.retailPrice ? [{ unitId: baseUnit.id, customerType: "RETAIL", price: opts.retailPrice, effectiveFrom: new Date() }] : []),
+            { unitId: sellUnit.id, customerType: CustomerType.INSTITUSI, price: opts.sellPrice, effectiveFrom: new Date() },
+            ...(opts.retailPrice ? [{ unitId: baseUnit.id, customerType: CustomerType.RETAIL, price: opts.retailPrice, effectiveFrom: new Date() }] : []),
           ],
         },
       },
@@ -387,38 +472,37 @@ async function main() {
 
   // 8. Price Agreements (PAGU)
   console.log("📝 Seeding Price Agreements...");
-  await prisma.customerProductAgreement.create({
-    data: {
-      institutionId: dapurSooko.id,
-      productId: cimory.id,
-      unitId: units[1].id, // KARTON
-      priceCeiling: 125000,
-      averageWeeklyQty: 100,
-      effectiveFrom: new Date("2026-01-01"),
-    },
-  });
 
-  await prisma.customerProductAgreement.create({
-    data: {
-      institutionId: dapurSooko.id,
-      productId: beras.id,
-      unitId: units[5].id, // SAK
-      priceCeiling: 70000,
-      averageWeeklyQty: 50,
-      effectiveFrom: new Date("2026-01-01"),
-    },
-  });
+  async function upsertPagu(institutionId: string, productId: string, unitId: string, priceCeiling: number, avgWeeklyQty: number) {
+    const existing = await prisma.customerProductAgreement.findFirst({
+      where: { institutionId, productId, unitId },
+    });
+    if (!existing) {
+      await prisma.customerProductAgreement.create({
+        data: {
+          institutionId,
+          productId,
+          unitId,
+          priceCeiling,
+          averageWeeklyQty: avgWeeklyQty,
+          effectiveFrom: new Date("2026-01-01"),
+        },
+      });
+    }
+  }
 
-  await prisma.customerProductAgreement.create({
-    data: {
-      institutionId: dapurSooko.id,
-      productId: minyak.id,
-      unitId: units[4].id, // LITER
-      priceCeiling: 39000,
-      averageWeeklyQty: 30,
-      effectiveFrom: new Date("2026-01-01"),
-    },
-  });
+  // Dapur Sooko - 3 PAGU
+  await upsertPagu(dapurSooko.id, cimory.id, units[1].id, 125000, 100);
+  await upsertPagu(dapurSooko.id, beras.id, units[5].id, 70000, 50);
+  await upsertPagu(dapurSooko.id, minyak.id, units[4].id, 39000, 30);
+
+  // Dapur Gedeg - 2 PAGU
+  await upsertPagu(dapurGedeg.id, gula.id, units[2].id, 17000, 40);
+  await upsertPagu(dapurGedeg.id, aqua.id, units[2].id, 62000, 60);
+
+  // Dapur Blooto - 2 PAGU
+  await upsertPagu(dapurBlooto.id, greenfields.id, units[4].id, 26000, 20);
+  await upsertPagu(dapurBlooto.id, minyak.id, units[4].id, 40000, 25);
 
   // 9. Users
   console.log("👤 Seeding Users...");
@@ -453,6 +537,17 @@ async function main() {
 
   // 11. Sample Sales Orders
   console.log("📋 Seeding Sample Orders...");
+
+  // Cleanup existing sample orders
+  for (const on of ["SO-SEED-001", "SO-SEED-002", "SO-SEED-003"]) {
+    const existing = await prisma.salesOrder.findUnique({ where: { orderNumber: on } });
+    if (existing) {
+      await prisma.salesOrderItem.deleteMany({ where: { salesOrderId: existing.id } });
+      await prisma.salesOrderStatusHistory.deleteMany({ where: { salesOrderId: existing.id } });
+      await prisma.salesOrder.delete({ where: { id: existing.id } });
+    }
+  }
+
   const order1 = await prisma.salesOrder.create({
     data: {
       orderNumber: "SO-SEED-001",
@@ -546,6 +641,99 @@ async function main() {
     },
   });
 
+  // Portal Order (dari customer portal)
+  const dapurIdentity = await prisma.dapurIdentity.findFirst({ where: { institutionId: dapurSooko.id } });
+  if (dapurIdentity) {
+    // Cleanup existing portal seed order
+    const existingPortal = await prisma.salesOrder.findUnique({ where: { orderNumber: "SO-PORTAL-SEED" } });
+    if (existingPortal) {
+      await prisma.productRequest.deleteMany({ where: { salesOrderId: existingPortal.id } });
+      await prisma.salesOrderItem.deleteMany({ where: { salesOrderId: existingPortal.id } });
+      await prisma.salesOrderStatusHistory.deleteMany({ where: { salesOrderId: existingPortal.id } });
+      await prisma.notification.deleteMany({ where: { relatedOrderId: existingPortal.id } });
+      await prisma.salesOrder.delete({ where: { id: existingPortal.id } });
+    }
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const deliveryDeadline = new Date(tomorrow);
+    deliveryDeadline.setHours(14, 0, 0, 0);
+    const sourcingDeadline = new Date(deliveryDeadline.getTime() - 60 * 60 * 1000);
+
+    await prisma.salesOrder.create({
+      data: {
+        orderNumber: "SO-PORTAL-SEED",
+        channel: "WHATSAPP_B2B",
+        orderType: "B2B_GROSIR",
+        institutionId: dapurSooko.id,
+        dapurIdentityId: dapurIdentity.id,
+        entryMethod: "CUSTOMER_PORTAL",
+        deliveryMethod: "DELIVERY",
+        deliveryAddressText: dapurIdentity.deliveryAddress,
+        requestedDeliveryDate: tomorrow,
+        requestedDeliveryTime: "14:00",
+        deliveryTimeSlot: "SIANG",
+        deliveryDeadline,
+        sourcingDeadline,
+        status: "MENUNGGU_KONFIRMASI",
+        fulfillmentStatus: "BELUM_DIPROSES",
+        paymentStatus: "BELUM_BAYAR",
+        customerStatus: "PENDING_REVIEW",
+        customerNote: "Pesanan dari portal, mohon segera diproses. Deadline sourcing 1 jam sebelum pengiriman.",
+        subtotal: 300000,
+        totalAmount: 300000,
+        createdById: adminUser.id,
+        statusHistory: {
+          create: {
+            fromStatus: null,
+            toStatus: "MENUNGGU_KONFIRMASI",
+            changedById: adminUser.id,
+            note: "Pesanan dibuat via portal customer",
+            customerNote: "Pesanan Anda sedang ditinjau oleh admin. Estimasi pengiriman: " + tomorrow.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) + " pukul 14:00",
+            isVisibleToCustomer: true,
+          },
+        },
+        items: {
+          create: [
+            {
+              productId: cimory.id,
+              unitId: units[1].id,
+              qty: 5,
+              unitSellPrice: 124000,
+              unitCostPrice: 100000,
+              subtotalSell: 620000,
+              subtotalCost: 500000,
+              marginAmount: 120000,
+              isAvailableFromStock: false,
+            },
+            {
+              productId: beras.id,
+              unitId: units[5].id,
+              qty: 3,
+              unitSellPrice: 68000,
+              unitCostPrice: 62000,
+              subtotalSell: 204000,
+              subtotalCost: 186000,
+              marginAmount: 18000,
+              isAvailableFromStock: false,
+            },
+          ],
+        },
+        productRequests: {
+          create: {
+            dapurIdentityId: dapurIdentity.id,
+            productName: "Telur Ayam Kampung",
+            requestedQty: 50,
+            requestedUnit: "Kg",
+            estimatedPrice: 45000,
+            notes: "Telur organik untuk menu harian",
+            status: "PENDING",
+          },
+        },
+      },
+    });
+  }
+
   // Product items for the Cimory product (seed order items)
   if (cimory) {
     await prisma.salesOrderItem.create({
@@ -577,6 +765,49 @@ async function main() {
         isAvailableFromStock: true,
       },
     });
+  }
+
+  // Seed sample notifications
+  console.log("🔔 Seeding Notifications...");
+  if (dapurIdentity && adminUser) {
+    const portalOrder = await prisma.salesOrder.findFirst({ where: { orderNumber: "SO-PORTAL-SEED" } });
+    if (portalOrder) {
+      await prisma.notification.create({
+        data: {
+          dapurIdentityId: dapurIdentity.id,
+          type: "ORDER_STATUS_CHANGED",
+          title: `Pesanan ${portalOrder.orderNumber} Dibuat`,
+          message: "Pesanan Anda telah dibuat dan sedang ditinjau oleh admin.",
+          link: `/portal/orders/${portalOrder.id}`,
+          priority: "MEDIUM",
+          relatedOrderId: portalOrder.id,
+        },
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: adminUser.id,
+          type: "ORDER_STATUS_CHANGED",
+          title: `Pesanan Baru: ${portalOrder.orderNumber}`,
+          message: "Pesanan dari portal customer perlu direview. Deadline pengiriman besok.",
+          link: `/erp/orders/${portalOrder.id}`,
+          priority: "HIGH",
+          relatedOrderId: portalOrder.id,
+        },
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: adminUser.id,
+          type: "DELIVERY_DEADLINE_APPROACHING",
+          title: `Deadline Pengiriman: ${portalOrder.orderNumber}`,
+          message: "Pengiriman dijadwalkan besok. Siapkan pengadaan barang.",
+          link: `/erp/orders/${portalOrder.id}`,
+          priority: "HIGH",
+          relatedOrderId: portalOrder.id,
+        },
+      });
+    }
   }
 
   console.log("✅ Seed completed successfully!");

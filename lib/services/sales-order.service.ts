@@ -31,6 +31,12 @@ export type CreateSalesOrderInput = {
   deliveryLongitude?: number;
   isFreeDelivery?: boolean;
   requestedDeadline?: Date;
+  requestedDeliveryDate?: Date;
+  requestedDeliveryTime?: string;
+  deliveryTimeSlot?: "PAGI" | "SIANG" | "SORE" | "CUSTOM";
+  entryMethod?: "ADMIN_INPUT" | "CUSTOMER_PORTAL";
+  dapurIdentityId?: string;
+  customerNote?: string;
   items: Array<{
     productId: string;
     unitId: string;
@@ -72,6 +78,12 @@ export async function createSalesOrder(
     deliveryLongitude,
     isFreeDelivery,
     requestedDeadline,
+    requestedDeliveryDate,
+    requestedDeliveryTime,
+    deliveryTimeSlot,
+    entryMethod,
+    dapurIdentityId,
+    customerNote,
     items,
     createdById,
   } = input;
@@ -117,6 +129,33 @@ export async function createSalesOrder(
     }
   }
 
+  // Compute delivery deadlines
+  let deliveryDeadline: Date | null = null;
+  let sourcingDeadline: Date | null = null;
+
+  if (requestedDeliveryDate) {
+    const deliveryDate = new Date(requestedDeliveryDate);
+    if (deliveryTimeSlot === "CUSTOM" && requestedDeliveryTime) {
+      const [hours, minutes] = requestedDeliveryTime.split(":").map(Number);
+      deliveryDeadline = new Date(deliveryDate);
+      deliveryDeadline.setHours(hours, minutes, 0, 0);
+    } else if (deliveryTimeSlot === "PAGI") {
+      deliveryDeadline = new Date(deliveryDate);
+      deliveryDeadline.setHours(12, 0, 0, 0);
+    } else if (deliveryTimeSlot === "SIANG") {
+      deliveryDeadline = new Date(deliveryDate);
+      deliveryDeadline.setHours(17, 0, 0, 0);
+    } else if (deliveryTimeSlot === "SORE") {
+      deliveryDeadline = new Date(deliveryDate);
+      deliveryDeadline.setHours(20, 0, 0, 0);
+    } else {
+      deliveryDeadline = new Date(deliveryDate);
+      deliveryDeadline.setHours(17, 0, 0, 0);
+    }
+
+    sourcingDeadline = new Date(deliveryDeadline.getTime() - 60 * 60 * 1000);
+  }
+
   // Create order dalam transaction
   const order = await prisma.$transaction(
     async (tx) => {
@@ -128,6 +167,15 @@ export async function createSalesOrder(
         orderType,
         customerId,
         institutionId,
+        dapurIdentityId,
+        entryMethod: entryMethod || "ADMIN_INPUT",
+        requestedDeliveryDate,
+        requestedDeliveryTime,
+        deliveryTimeSlot,
+        deliveryDeadline,
+        sourcingDeadline,
+        customerStatus: entryMethod === "CUSTOMER_PORTAL" ? "PENDING_REVIEW" : undefined,
+        customerNote,
         deliveryMethod,
         deliveryAddressText,
         deliveryLatitude,

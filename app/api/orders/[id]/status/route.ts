@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { getSession } from "@/lib/auth/session";
 import { OrderStatus } from "@prisma/client";
 import { updateOrderStatus } from "@/lib/services/sales-order.service";
 import { prisma } from "@/lib/prisma";
@@ -13,8 +13,8 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -29,19 +29,7 @@ export async function PATCH(
       );
     }
 
-    // Resolve internal user id dari clerkId
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true },
-    });
-    if (!user) {
-      return NextResponse.json(
-        { error: "User tidak ditemukan" },
-        { status: 403 }
-      );
-    }
-
-    await updateOrderStatus(params.id, newStatus, user.id, note);
+    await updateOrderStatus(params.id, newStatus, session.id, note);
 
     return NextResponse.json({ success: true, status: newStatus });
   } catch (err) {

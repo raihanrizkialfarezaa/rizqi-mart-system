@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Trash2, Minus, Info, Loader2, Check, AlertCircle, Building2, Package } from "lucide-react";
+import { Search, Plus, Trash2, Minus, Info, Loader2, Check, AlertCircle, Building2, Package, CalendarDays, Clock } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/decimal";
 
@@ -10,7 +10,19 @@ type Institution = {
   id: string;
   name: string;
   type: string;
-  address: string | null;
+  address: string;
+  parentInstitution?: {
+    id: string;
+    name: string;
+    type: string;
+    address: string;
+  } | null;
+  contacts?: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    role: string;
+  }>;
 };
 
 type ProductUnit = {
@@ -68,6 +80,17 @@ export default function OrderBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [deliveryTimeSlot, setDeliveryTimeSlot] = useState<"PAGI" | "SIANG" | "SORE" | "CUSTOM" | "">("");
+  const [deliveryTime, setDeliveryTime] = useState("");
+  const [productRequests, setProductRequests] = useState<Array<{
+    productName: string;
+    requestedQty: number;
+    requestedUnit: string;
+    notes?: string;
+  }>>([]);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [requestForm, setRequestForm] = useState({ name: "", qty: "", unit: "", notes: "" });
   const searchRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -127,7 +150,7 @@ export default function OrderBuilder() {
         )
       );
       setSearchQuery("");
-      setSearchResults([]);
+      loadProducts("");
       setShowProductDropdown(false);
       return;
     }
@@ -147,7 +170,7 @@ export default function OrderBuilder() {
         const json = await res.json();
         if (json.data) {
           priceCeiling = json.data.priceCeiling;
-          priceCeilingExceeded = price > priceCeiling;
+          priceCeilingExceeded = priceCeiling !== null && price > priceCeiling;
         }
       } catch {}
     }
@@ -169,7 +192,7 @@ export default function OrderBuilder() {
       },
     ]);
     setSearchQuery("");
-    setSearchResults([]);
+    loadProducts("");
     setShowProductDropdown(false);
   }
 
@@ -181,6 +204,21 @@ export default function OrderBuilder() {
               ...item,
               qty: Math.max(1, item.qty + delta),
               subtotal: Math.max(1, item.qty + delta) * item.unitSellPrice,
+            }
+          : item
+      )
+    );
+  }
+
+  function updateQtyDirectly(itemId: string, val: number) {
+    const qty = Math.max(1, val);
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              qty,
+              subtotal: qty * item.unitSellPrice,
             }
           : item
       )
@@ -229,24 +267,36 @@ export default function OrderBuilder() {
 
     setSubmitting(true);
     try {
+      const body: Record<string, unknown> = {
+        channel: orderType === "B2B_GROSIR" ? "WHATSAPP_B2B" : "ECOMMERCE",
+        orderType,
+        institutionId: orderType === "B2B_GROSIR" ? selectedInstitutionId : undefined,
+        deliveryMethod: "DELIVERY",
+        deliveryAddressText: "",
+        isFreeDelivery: false,
+        items: cart.map((item) => ({
+          productId: item.product.id,
+          unitId: item.unitId,
+          qty: item.qty,
+          unitSellPrice: item.unitSellPrice,
+          baseUnitConversion: item.conversionFactor,
+        })),
+      };
+
+      if (orderType === "B2B_GROSIR" && deliveryDate) {
+        body.requestedDeliveryDate = new Date(deliveryDate).toISOString();
+        body.deliveryTimeSlot = deliveryTimeSlot || undefined;
+        body.requestedDeliveryTime = deliveryTimeSlot === "CUSTOM" ? deliveryTime : undefined;
+      }
+
+      if (orderType === "B2B_GROSIR" && productRequests.length > 0) {
+        body.productRequests = productRequests;
+      }
+
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channel: orderType === "B2B_GROSIR" ? "WHATSAPP_B2B" : "ECOMMERCE",
-          orderType,
-          institutionId: orderType === "B2B_GROSIR" ? selectedInstitutionId : undefined,
-          deliveryMethod: "DELIVERY",
-          deliveryAddressText: "",
-          isFreeDelivery: false,
-          items: cart.map((item) => ({
-            productId: item.product.id,
-            unitId: item.unitId,
-            qty: item.qty,
-            unitSellPrice: item.unitSellPrice,
-            baseUnitConversion: item.conversionFactor,
-          })),
-        }),
+        body: JSON.stringify(body),
       });
 
       const json = await res.json();
@@ -257,6 +307,7 @@ export default function OrderBuilder() {
       setSuccess(`Pesanan ${json.data?.orderNumber || ""} berhasil dibuat!`);
       setCart([]);
       setSelectedInstitutionId("");
+      setProductRequests([]);
 
       setTimeout(() => {
         router.push("/erp/orders");
@@ -316,26 +367,108 @@ export default function OrderBuilder() {
         </div>
 
         {orderType === "B2B_GROSIR" && (
-          <div className="min-w-[250px]">
+          <div className="min-w-[400px] space-y-2">
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
               <Building2 className="mr-1 inline h-4 w-4" />
-              Institusi
+              Dapur SPPG
             </label>
             <select
               value={selectedInstitutionId}
               onChange={(e) => setSelectedInstitutionId(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              <option value="">Pilih institusi...</option>
+              <option value="">Pilih dapur...</option>
               {institutions.map((inst) => (
                 <option key={inst.id} value={inst.id}>
-                  {inst.name} ({inst.type})
+                  {inst.name} • {inst.parentInstitution?.name || "N/A"} • {inst.address}
                 </option>
               ))}
             </select>
+            {selectedInstitutionId && (() => {
+              const selected = institutions.find((i) => i.id === selectedInstitutionId);
+              if (!selected) return null;
+              return (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800">
+                  <div>
+                    <span className="font-medium">🏢 Yayasan:</span>{" "}
+                    {selected.parentInstitution?.name || (
+                      <span className="italic">-</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="font-medium">📍 Alamat:</span> {selected.address}
+                  </div>
+                  {selected.contacts && selected.contacts.length > 0 && (
+                    <div>
+                      <span className="font-medium">👤 Kontak:</span>
+                      {selected.contacts.map((c, i) => (
+                        <span key={c.id}>
+                          {i > 0 && ", "}
+                          {c.name} ({c.phone})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
+
+      {/* Delivery Scheduling (B2B only) */}
+      {orderType === "B2B_GROSIR" && (
+        <div className="flex flex-wrap gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="min-w-[200px]">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              📅 Tanggal Pengiriman
+            </label>
+            <input
+              type="date"
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)}
+              min={new Date().toISOString().split("T")[0]}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              ⏰ Waktu Pengiriman
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {[
+                { id: "PAGI" as const, label: "Pagi", sub: "08-12" },
+                { id: "SIANG" as const, label: "Siang", sub: "12-17" },
+                { id: "SORE" as const, label: "Sore", sub: "17-20" },
+                { id: "CUSTOM" as const, label: "Custom", sub: "" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDeliveryTimeSlot(opt.id)}
+                  className={cn(
+                    "rounded-lg border px-3 py-1.5 text-xs font-medium",
+                    deliveryTimeSlot === opt.id
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
+                  )}
+                >
+                  {opt.label}
+                  {opt.sub && <span className="ml-1 text-gray-400">{opt.sub}</span>}
+                </button>
+              ))}
+            </div>
+            {deliveryTimeSlot === "CUSTOM" && (
+              <input
+                type="time"
+                value={deliveryTime}
+                onChange={(e) => setDeliveryTime(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Product Search & List */}
       <div ref={searchRef}>
@@ -389,6 +522,110 @@ export default function OrderBuilder() {
         )}
       </div>
 
+      {/* Custom Product Request for B2B */}
+      {orderType === "B2B_GROSIR" && (
+        <div className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
+          <button
+            type="button"
+            onClick={() => setShowRequestForm(!showRequestForm)}
+            className="flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+          >
+            <Package className="h-4 w-4" />
+            {showRequestForm ? "Tutup Form Produk Baru" : "Tambah Produk Baru (Tidak Terdaftar)"}
+          </button>
+
+          {showRequestForm && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 items-end bg-gray-50 p-4 rounded-lg border">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Nama Produk *</label>
+                <input
+                  type="text"
+                  placeholder="Nama produk baru..."
+                  value={requestForm.name}
+                  onChange={(e) => setRequestForm({ ...requestForm, name: e.target.value })}
+                  className="w-full rounded border px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Jumlah</label>
+                <input
+                  type="number"
+                  placeholder="Qty"
+                  value={requestForm.qty}
+                  onChange={(e) => setRequestForm({ ...requestForm, qty: e.target.value })}
+                  className="w-full rounded border px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Satuan</label>
+                <input
+                  type="text"
+                  placeholder="Satuan (e.g. Kg, Dus)"
+                  value={requestForm.unit}
+                  onChange={(e) => setRequestForm({ ...requestForm, unit: e.target.value })}
+                  className="w-full rounded border px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Catatan</label>
+                <input
+                  type="text"
+                  placeholder="Catatan tambahan..."
+                  value={requestForm.notes}
+                  onChange={(e) => setRequestForm({ ...requestForm, notes: e.target.value })}
+                  className="w-full rounded border px-3 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!requestForm.name.trim()) return;
+                    setProductRequests((prev) => [
+                      ...prev,
+                      {
+                        productName: requestForm.name.trim(),
+                        requestedQty: Number(requestForm.qty) || 1,
+                        requestedUnit: requestForm.unit.trim() || "PCS",
+                        notes: requestForm.notes.trim() || undefined,
+                      },
+                    ]);
+                    setRequestForm({ name: "", qty: "", unit: "", notes: "" });
+                  }}
+                  className="w-full rounded bg-primary text-white py-1.5 text-sm font-semibold hover:bg-primary/95"
+                >
+                  Tambahkan
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* List of custom requests */}
+          {productRequests.length > 0 && (
+            <div className="space-y-2 pt-2">
+              <h4 className="text-xs font-bold text-gray-700">Daftar Produk Baru yang Diminta:</h4>
+              <div className="divide-y border rounded bg-gray-50">
+                {productRequests.map((req, idx) => (
+                  <div key={idx} className="flex justify-between items-center px-3 py-2 text-sm">
+                    <div>
+                      <span className="font-semibold">{req.productName}</span> ({req.requestedQty} {req.requestedUnit})
+                      {req.notes && <p className="text-xs text-gray-500 italic mt-0.5">Catatan: {req.notes}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProductRequests((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Cart Items */}
       {cart.length > 0 && (
         <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
@@ -435,7 +672,13 @@ export default function OrderBuilder() {
                   >
                     <Minus className="h-3 w-3" />
                   </button>
-                  <span className="w-10 text-center text-sm font-medium">{item.qty}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={item.qty}
+                    onChange={(e) => updateQtyDirectly(item.id, Number(e.target.value) || 1)}
+                    className="w-12 rounded-md border border-gray-300 py-0.5 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
                   <button
                     type="button"
                     onClick={() => updateQty(item.id, 1)}
@@ -445,18 +688,11 @@ export default function OrderBuilder() {
                   </button>
                 </div>
 
-                <div className="w-24">
-                  <input
-                    type="number"
-                    value={item.unitSellPrice}
-                    onChange={(e) => updatePrice(item.id, Number(e.target.value) || 0)}
-                    className={cn(
-                      "w-full rounded-md border px-2 py-1 text-right text-sm",
-                      item.priceCeilingExceeded
-                        ? "border-red-300 bg-red-50 text-red-700"
-                        : "border-gray-300 text-gray-900"
-                    )}
-                  />
+                <div className={cn(
+                  "w-24 text-right text-sm font-semibold",
+                  item.priceCeilingExceeded ? "text-red-600 font-bold" : "text-gray-700"
+                )}>
+                  {formatCurrency(item.unitSellPrice)}
                 </div>
 
                 <div className="w-24 text-right text-sm font-medium text-gray-900">

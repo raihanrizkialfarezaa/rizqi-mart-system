@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentUser } from "@clerk/nextjs";
+import { getSession } from "@/lib/auth/session";
 import Link from "next/link";
 import { Package, Clock, CheckCircle, XCircle } from "lucide-react";
 
@@ -40,7 +40,7 @@ export default async function OrdersPage({
 }: {
   searchParams: { status?: string };
 }) {
-  const user = await currentUser();
+  const user = await getSession();
 
   if (!user) {
     redirect("/sign-in");

@@ -232,7 +232,7 @@ export async function createTestSupplier(overrides: any = {}) {
 }
 
 // Sourcing Request Factory
-export async function createTestSourcingRequest(productId: number, overrides: any = {}) {
+export async function createTestSourcingRequest(productId: string, overrides: any = {}) {
   let unitId = overrides.unitId;
   let salesOrderItemId = overrides.salesOrderItemId;
 
