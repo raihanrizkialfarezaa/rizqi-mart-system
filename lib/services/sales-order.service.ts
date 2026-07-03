@@ -13,6 +13,8 @@ import { toDecimal, addDecimal, multiplyDecimal } from "@/lib/utils/decimal";
 import { generateDocumentNumber } from "@/lib/utils/document-numbering";
 import { allocateStock, createSourcingRequestForShortage } from "./inventory.service";
 import { validatePriceCeiling } from "./sales-order-calculations";
+import { createNotification, createOrderStatusNotification } from "./notification.service";
+import { formatCurrency } from "@/lib/utils/decimal";
 
 /**
  * Sales Order Service
@@ -306,6 +308,33 @@ export async function createSalesOrder(
   },
   { timeout: 30000 });
 
+  // Trigger notifications
+  try {
+    if (order.channel === "ECOMMERCE" || order.orderType === "B2C_ECER") {
+      await createNotification({
+        userId: order.createdById,
+        type: "ORDER_STATUS_CHANGED",
+        title: `Pesanan B2C Baru: ${order.orderNumber}`,
+        message: `Pesanan ecer B2C ${order.orderNumber} dengan total ${formatCurrency(order.totalAmount.toString())} baru saja masuk.`,
+        link: `/erp/orders/${order.id}`,
+        priority: "MEDIUM",
+        relatedOrderId: order.id,
+      });
+    } else if (order.entryMethod === "CUSTOMER_PORTAL") {
+      await createNotification({
+        userId: order.createdById,
+        type: "ORDER_STATUS_CHANGED",
+        title: `Pesanan B2B Baru: ${order.orderNumber}`,
+        message: `Dapur ${order.institution?.name || ""} telah mengajukan pesanan baru ${order.orderNumber} yang memerlukan peninjauan.`,
+        link: `/erp/orders/${order.id}`,
+        priority: "HIGH",
+        relatedOrderId: order.id,
+      });
+    }
+  } catch (err) {
+    console.error("[createSalesOrder] Notification trigger failed:", err);
+  }
+
   return order;
 }
 
@@ -347,6 +376,20 @@ export async function updateOrderStatus(
       },
     });
   });
+
+  // Trigger status update notifications
+  try {
+    await createOrderStatusNotification(
+      order.id,
+      order.orderNumber,
+      order.status,
+      newStatus,
+      changedById,
+      order.dapurIdentityId
+    );
+  } catch (err) {
+    console.error("[updateOrderStatus] Notification trigger failed:", err);
+  }
 }
 
 /**

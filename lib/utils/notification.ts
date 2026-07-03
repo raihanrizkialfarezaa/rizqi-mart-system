@@ -74,6 +74,26 @@ export function formatNotificationText(title: string, message: string) {
     displayTitle = "Pembayaran Dikonfirmasi";
     displayMessage = cleanMessage;
   }
+  // Pattern 8: "Sourcing Diputuskan"
+  else if (titleLower.includes("sourcing diputuskan")) {
+    displayTitle = "Keputusan Sourcing Selesai";
+    displayMessage = cleanMessage;
+  }
+  // Pattern 9: "Purchase Order Dibuat"
+  else if (titleLower.includes("purchase order dibuat")) {
+    displayTitle = "Purchase Order Diterbitkan";
+    displayMessage = cleanMessage;
+  }
+  // Pattern 10: "Penerimaan Barang & Re-stock"
+  else if (titleLower.includes("penerimaan barang")) {
+    displayTitle = "Re-stock & Penerimaan Barang";
+    displayMessage = cleanMessage;
+  }
+  // Pattern 11: "Pesanan B2C Baru" / "Pesanan B2B Baru"
+  else if (titleLower.includes("pesanan b2c baru") || titleLower.includes("pesanan b2b baru")) {
+    displayTitle = cleanTitle;
+    displayMessage = cleanMessage;
+  }
 
   return { title: displayTitle, message: displayMessage };
 }

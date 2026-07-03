@@ -3,6 +3,7 @@ import { SourcingStatus, Prisma } from "@prisma/client";
 import { Decimal } from "decimal.js";
 import { toDecimal, compareDecimal } from "@/lib/utils/decimal";
 import { generateDocumentNumber } from "@/lib/utils/document-numbering";
+import { createNotification } from "./notification.service";
 
 /**
  * Procurement Service
@@ -152,6 +153,35 @@ export async function decideSourcingSupplier(input: {
       decidedAt: new Date(),
     },
   });
+
+  // Trigger notification
+  try {
+    const req = await prisma.sourcingRequest.findUnique({
+      where: { id: sourcingRequestId },
+      include: {
+        product: { select: { name: true } },
+        unit: { select: { code: true } },
+        salesOrderItem: {
+          include: {
+            salesOrder: { select: { id: true, createdById: true } },
+          },
+        },
+      },
+    });
+    if (req?.salesOrderItem?.salesOrder) {
+      await createNotification({
+        userId: req.salesOrderItem.salesOrder.createdById,
+        type: "SOURCING_DECISION",
+        title: `Sourcing Diputuskan: ${req.product.name}`,
+        message: `Keputusan sourcing telah dibuat untuk ${req.product.name} (${req.qtyNeeded} ${req.unit.code}). Alasan: ${decisionReason}`,
+        link: `/erp/orders/${req.salesOrderItem.salesOrderId}`,
+        priority: "MEDIUM",
+        relatedOrderId: req.salesOrderItem.salesOrderId,
+      });
+    }
+  } catch (err) {
+    console.error("[decideSourcingSupplier] Notification trigger failed:", err);
+  }
 }
 
 /**
@@ -211,6 +241,20 @@ export async function createPurchaseOrder(input: {
 
     return purchaseOrder;
   });
+
+  // Trigger notification
+  try {
+    await createNotification({
+      userId: createdById,
+      type: "PROCUREMENT_EVENT",
+      title: `Purchase Order Dibuat: ${poNumber}`,
+      message: `Purchase Order ${poNumber} tujuan supplier telah berhasil dibuat.`,
+      link: `/erp/procurement`,
+      priority: "MEDIUM",
+    });
+  } catch (err) {
+    console.error("[createPurchaseOrder] Notification trigger failed:", err);
+  }
 
   return po.id;
 }
@@ -298,6 +342,24 @@ export async function receiveGoods(input: {
 
     return goodsReceipt;
   });
+
+  // Trigger notification
+  try {
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: { supplier: { select: { name: true } } },
+    });
+    await createNotification({
+      userId: receivedById,
+      type: "STOCK_ALERT",
+      title: `Penerimaan Barang & Re-stock`,
+      message: `Penerimaan barang untuk PO ${po?.poNumber || ""} dari ${po?.supplier.name || ""} berhasil diproses. Stok telah diperbarui.`,
+      link: `/erp/inventory`,
+      priority: "MEDIUM",
+    });
+  } catch (err) {
+    console.error("[receiveGoods] Notification trigger failed:", err);
+  }
 
   return receipt.id;
 }
