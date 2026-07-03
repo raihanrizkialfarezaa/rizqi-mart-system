@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, ArrowRight } from "lucide-react";
+import { Building2, ArrowRight, User, Phone } from "lucide-react";
 
 type Identity = {
   id: string;
@@ -95,12 +95,19 @@ export default function PortalHome() {
                   <p className="mt-0.5 text-xs text-gray-400">{identity.description}</p>
                 )}
                 <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
-                  <span>👤 {identity.primaryContact}</span>
-                  <span>📞 {identity.contactPhone}</span>
+                  <span className="flex items-center gap-1">
+                    <User className="h-3.5 w-3.5 text-gray-400" />
+                    {identity.primaryContact}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Phone className="h-3.5 w-3.5 text-gray-400" />
+                    {identity.contactPhone}
+                  </span>
                 </div>
                 {identity.institution.parentInstitution && (
                   <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                    🏢 {identity.institution.parentInstitution.name}
+                    <Building2 className="h-3 w-3 shrink-0" />
+                    {identity.institution.parentInstitution.name}
                   </div>
                 )}
               </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Trash2, Minus, Info, Loader2, Check, AlertCircle, Building2, Package, CalendarDays, Clock } from "lucide-react";
+import { Search, Plus, Trash2, Minus, Info, Loader2, Check, AlertCircle, Building2, Package, CalendarDays, Clock, MapPin, User } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/decimal";
 
@@ -388,25 +388,34 @@ export default function OrderBuilder() {
               const selected = institutions.find((i) => i.id === selectedInstitutionId);
               if (!selected) return null;
               return (
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800">
-                  <div>
-                    <span className="font-medium">🏢 Yayasan:</span>{" "}
-                    {selected.parentInstitution?.name || (
-                      <span className="italic">-</span>
-                    )}
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                    <span>
+                      <span className="font-medium">Yayasan:</span>{" "}
+                      {selected.parentInstitution?.name || (
+                        <span className="italic">-</span>
+                      )}
+                    </span>
                   </div>
-                  <div>
-                    <span className="font-medium">📍 Alamat:</span> {selected.address}
+                  <div className="flex items-start gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-blue-600 mt-0.5" />
+                    <span>
+                      <span className="font-medium">Alamat:</span> {selected.address}
+                    </span>
                   </div>
                   {selected.contacts && selected.contacts.length > 0 && (
-                    <div>
-                      <span className="font-medium">👤 Kontak:</span>
-                      {selected.contacts.map((c, i) => (
-                        <span key={c.id}>
-                          {i > 0 && ", "}
-                          {c.name} ({c.phone})
-                        </span>
-                      ))}
+                    <div className="flex items-start gap-1.5">
+                      <User className="h-3.5 w-3.5 shrink-0 text-blue-600 mt-0.5" />
+                      <span>
+                        <span className="font-medium">Kontak:</span>{" "}
+                        {selected.contacts.map((c, i) => (
+                          <span key={c.id}>
+                            {i > 0 && ", "}
+                            {c.name} ({c.phone})
+                          </span>
+                        ))}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -420,8 +429,9 @@ export default function OrderBuilder() {
       {orderType === "B2B_GROSIR" && (
         <div className="flex flex-wrap gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
           <div className="min-w-[200px]">
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              📅 Tanggal Pengiriman
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <CalendarDays className="h-4 w-4 text-gray-500" />
+              Tanggal Pengiriman
             </label>
             <input
               type="date"
@@ -432,8 +442,9 @@ export default function OrderBuilder() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              ⏰ Waktu Pengiriman
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <Clock className="h-4 w-4 text-gray-500" />
+              Waktu Pengiriman
             </label>
             <div className="flex flex-wrap gap-1">
               {[

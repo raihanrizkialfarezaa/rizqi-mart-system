@@ -77,8 +77,9 @@ export default function DapurDashboardClient({
           <p className="text-xs font-medium text-primary">Selamat datang,</p>
           <h1 className="text-lg font-bold text-gray-900">{identity.displayName}</h1>
           {identity.institution.parentInstitution && (
-            <p className="text-xs text-gray-500">
-              🏢 {identity.institution.parentInstitution.name}
+            <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+              <Building2 className="h-3.5 w-3.5 text-gray-400" />
+              {identity.institution.parentInstitution.name}
             </p>
           )}
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Clock, Truck, XCircle, Package } from "lucide-react";
+import { ArrowLeft, Check, Clock, Truck, XCircle, Package, Calendar } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/decimal";
 import { cn } from "@/lib/utils/cn";
 
@@ -133,7 +133,7 @@ export default function PortalOrderDetailClient({ order }: { order: OrderData })
           {order.requestedDeliveryDate && (
             <div className="mt-6 border-t pt-3 text-center">
               <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/5 border border-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <span>📅</span>
+                <Calendar className="h-3.5 w-3.5" />
                 <span>
                   Pengiriman: {new Date(order.requestedDeliveryDate).toLocaleDateString("id-ID", {
                     weekday: "long", day: "numeric", month: "long",

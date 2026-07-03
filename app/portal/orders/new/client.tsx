@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Search, Plus, Minus, Trash2, ShoppingCart,
   Calendar, Clock, Package, Building2, Send, Loader2, AlertCircle,
+  Sun, CloudSun, Moon,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/decimal";
 import { cn } from "@/lib/utils/cn";
@@ -192,26 +193,30 @@ export default function PortalOrderBuilder({
         <label className="mb-1 block text-xs font-medium text-gray-500">Waktu</label>
         <div className="mb-3 grid grid-cols-4 gap-2">
           {[
-            { id: "PAGI" as const, label: "☀️ Pagi", sub: "08-12" },
-            { id: "SIANG" as const, label: "🌤️ Siang", sub: "12-17" },
-            { id: "SORE" as const, label: "🌙 Sore", sub: "17-20" },
-            { id: "CUSTOM" as const, label: "⏰ Custom", sub: "" },
-          ].map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setDeliveryTimeSlot(opt.id)}
-              className={cn(
-                "rounded-lg border p-2 text-center text-xs active:scale-[0.97]",
-                deliveryTimeSlot === opt.id
-                  ? "border-primary bg-primary/10 text-primary font-medium"
-                  : "border-gray-200 text-gray-600"
-              )}
-            >
-              <div>{opt.label}</div>
-              {opt.sub && <div className="text-gray-400">{opt.sub}</div>}
-            </button>
-          ))}
+            { id: "PAGI" as const, label: "Pagi", sub: "08-12", icon: Sun },
+            { id: "SIANG" as const, label: "Siang", sub: "12-17", icon: CloudSun },
+            { id: "SORE" as const, label: "Sore", sub: "17-20", icon: Moon },
+            { id: "CUSTOM" as const, label: "Custom", sub: "", icon: Clock },
+          ].map((opt) => {
+            const Icon = opt.icon;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setDeliveryTimeSlot(opt.id)}
+                className={cn(
+                  "flex flex-col items-center justify-center rounded-lg border p-2 text-center text-xs transition-all active:scale-[0.97]",
+                  deliveryTimeSlot === opt.id
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <Icon className={cn("h-4 w-4 mb-1 shrink-0", deliveryTimeSlot === opt.id ? "text-primary" : "text-gray-400")} />
+                <div>{opt.label}</div>
+                {opt.sub && <div className="text-[10px] text-gray-400 mt-0.5">{opt.sub}</div>}
+              </button>
+            );
+          })}
         </div>
 
         {deliveryTimeSlot === "CUSTOM" && (
