@@ -12,6 +12,7 @@ import { Decimal } from "decimal.js";
 import { toDecimal, addDecimal, multiplyDecimal } from "@/lib/utils/decimal";
 import { generateDocumentNumber } from "@/lib/utils/document-numbering";
 import { allocateStock, createSourcingRequestForShortage } from "./inventory.service";
+import { validatePriceCeiling } from "./sales-order-calculations";
 
 /**
  * Sales Order Service
@@ -78,8 +79,47 @@ export async function createSalesOrder(
   // Generate order number
   const orderNumber = await generateDocumentNumber("SALES_ORDER");
 
+  // PAGU validation untuk B2B orders
+  if (institutionId && orderType === "B2B_GROSIR") {
+    const paguErrors: Array<{
+      productId: string;
+      unitSellPrice: number;
+      priceCeiling?: number;
+      exceedsBy?: number;
+    }> = [];
+
+    for (const item of items) {
+      const result = await validatePriceCeiling(
+        institutionId,
+        item.productId,
+        item.unitId,
+        item.unitSellPrice
+      );
+
+      if (!result.isValid) {
+        paguErrors.push({
+          productId: item.productId,
+          unitSellPrice: item.unitSellPrice,
+          priceCeiling: result.priceCeiling?.toNumber(),
+          exceedsBy: result.exceedsBy?.toNumber(),
+        });
+      }
+    }
+
+    if (paguErrors.length > 0) {
+      const details = paguErrors
+        .map(
+          (e) =>
+            `Product ${e.productId}: harga Rp${e.unitSellPrice} melebihi pagu Rp${e.priceCeiling} (kelebihan Rp${e.exceedsBy})`
+        )
+        .join("; ");
+      throw new Error(`PAGU validation failed: ${details}`);
+    }
+  }
+
   // Create order dalam transaction
-  const order = await prisma.$transaction(async (tx) => {
+  const order = await prisma.$transaction(
+    async (tx) => {
     // 1. Create SalesOrder
     const newOrder = await tx.salesOrder.create({
       data: {
@@ -138,7 +178,7 @@ export async function createSalesOrder(
         salesOrderItemId: orderItem.id,
         actorId: createdById,
         baseUnitConversion: item.baseUnitConversion,
-      });
+      }, tx);
 
       // Update order item dengan cost info
       const marginAmount = multiplyDecimal(item.qty, item.unitSellPrice).minus(
@@ -157,8 +197,8 @@ export async function createSalesOrder(
 
       totalCost = addDecimal(totalCost, allocationResult.totalCost);
 
-      // Jika tidak tersedia, tandai untuk sourcing
-      if (!allocationResult.allocated && allocationResult.needsSourcing) {
+      // Jika tidak fully tersedia, buat sourcing request untuk sisa
+      if (allocationResult.needsSourcing) {
         allItemsAvailable = false;
 
         // Create sourcing request
@@ -168,7 +208,8 @@ export async function createSalesOrder(
           item.productId,
           item.unitId,
           allocationResult.remainingQty,
-          deadline
+          deadline,
+          tx
         );
       }
     }
@@ -214,7 +255,8 @@ export async function createSalesOrder(
         createdBy: true,
       },
     });
-  });
+  },
+  { timeout: 30000 });
 
   return order;
 }

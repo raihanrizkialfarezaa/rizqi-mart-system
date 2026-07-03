@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader, Panel } from "@/components/erp/Panel";
+import OrderBuilder from "@/components/erp/orders/OrderBuilder";
 
 export default function NewOrderPage() {
   return (
@@ -18,19 +19,7 @@ export default function NewOrderPage() {
       />
 
       <Panel>
-        <div className="flex items-start gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-700">
-          <Info className="mt-0.5 h-5 w-5 shrink-0" />
-          <div>
-            <p className="font-medium">Form order builder akan tersedia.</p>
-            <p className="mt-1 text-blue-600">
-              Alur: pilih institusi &rarr; tambah item (cek pagu harga) &rarr;
-              sistem alokasi stok otomatis &rarr; buat SourcingRequest untuk item
-              yang tidak ready. Service layer{" "}
-              <code className="rounded bg-blue-100 px-1">createSalesOrder()</code>{" "}
-              sudah siap dipanggil.
-            </p>
-          </div>
-        </div>
+        <OrderBuilder />
       </Panel>
     </div>
   );

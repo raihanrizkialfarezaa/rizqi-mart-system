@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { Bell, Search, LogOut } from "lucide-react";
+import { Search, LogOut } from "lucide-react";
+import NotificationDropdown from "./NotificationDropdown";
 
 export default function Topbar({ title }: { title?: string }) {
   const { user, logout } = useAuth();
@@ -24,10 +25,7 @@ export default function Topbar({ title }: { title?: string }) {
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
         </div>
 
-        <button className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100">
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        <NotificationDropdown />
 
         {user && (
           <div className="flex items-center gap-2">

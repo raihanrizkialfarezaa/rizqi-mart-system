@@ -36,9 +36,11 @@ export type StockAllocationInput = {
  * Produk dengan expiry date terdekat dikeluarkan duluan
  */
 export async function allocateStock(
-  input: StockAllocationInput
+  input: StockAllocationInput,
+  tx?: Prisma.TransactionClient
 ): Promise<AllocateStockResult> {
   const { productId, qtyNeeded, salesOrderItemId, actorId, baseUnitConversion } = input;
+  const client = tx || prisma;
 
   // Convert qty ke base unit
   const qtyNeededBase = multiplyDecimal(qtyNeeded, baseUnitConversion);
@@ -53,7 +55,7 @@ export async function allocateStock(
 
   // Query available batches dengan EFO strategy
   // Order: expiryDate ASC (yg paling cepat expired keluar duluan), lalu receivedAt ASC
-  const availableBatches = await prisma.stockBatch.findMany({
+  const availableBatches = await client.stockBatch.findMany({
     where: {
       productId,
       qtyRemainingBase: {
@@ -61,7 +63,7 @@ export async function allocateStock(
       },
     },
     orderBy: [
-      { expiryDate: "asc" }, // NULLS LAST handled by MySQL naturally
+      { expiryDate: "asc" },
       { receivedAt: "asc" },
     ],
   });
@@ -91,41 +93,39 @@ export async function allocateStock(
     : toDecimal(0);
 
   const fullyAllocated = remainingQty.lte(0);
+  const anyAllocated = batchesUsed.length > 0;
   const needsSourcing = !fullyAllocated;
 
-  // Jika fully allocated, commit stock movements dalam transaction
-  if (fullyAllocated) {
-    await prisma.$transaction(async (tx) => {
-      for (const batch of batchesUsed) {
-        // Update batch qty
-        await tx.stockBatch.update({
-          where: { id: batch.batchId },
-          data: {
-            qtyRemainingBase: {
-              decrement: batch.qtyTaken.toNumber(),
-            },
+  // Commit stock movements untuk batch apapun yang terpakai
+  // (partial allocation: ambil yang tersedia, sourcing untuk sisanya)
+  if (batchesUsed.length > 0) {
+    for (const batch of batchesUsed) {
+      await client.stockBatch.update({
+        where: { id: batch.batchId },
+        data: {
+          qtyRemainingBase: {
+            decrement: batch.qtyTaken.toNumber(),
           },
-        });
+        },
+      });
 
-        // Create stock movement record
-        await tx.stockMovement.create({
-          data: {
-            productId,
-            stockBatchId: batch.batchId,
-            type: StockMovementType.KELUAR_PENJUALAN,
-            qtyBase: batch.qtyTaken.neg().toNumber(), // negative untuk keluar
-            relatedSalesOrderItemId: salesOrderItemId,
-            actorId,
-            notes: `Alokasi stok untuk order item ${salesOrderItemId}`,
-          },
-        });
-      }
-    });
+      await client.stockMovement.create({
+        data: {
+          productId,
+          stockBatchId: batch.batchId,
+          type: StockMovementType.KELUAR_PENJUALAN,
+          qtyBase: batch.qtyTaken.neg().toNumber(),
+          relatedSalesOrderItemId: salesOrderItemId,
+          actorId,
+          notes: `Alokasi stok untuk order item ${salesOrderItemId}`,
+        },
+      });
+    }
   }
 
   return {
     success: true,
-    allocated: fullyAllocated,
+    allocated: anyAllocated,
     unitCostPrice,
     totalCost,
     batchesUsed,
@@ -142,9 +142,11 @@ export async function createSourcingRequestForShortage(
   productId: string,
   unitId: string,
   qtyNeeded: Decimal | number,
-  deadline: Date
+  deadline: Date,
+  tx?: Prisma.TransactionClient
 ): Promise<string> {
-  const sourcingRequest = await prisma.sourcingRequest.create({
+  const client = tx || prisma;
+  const sourcingRequest = await client.sourcingRequest.create({
     data: {
       salesOrderItemId,
       productId,
