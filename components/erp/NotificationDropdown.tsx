@@ -6,6 +6,7 @@ import { Bell, X, Clock, ExternalLink, CheckCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { id } from "date-fns/locale";
 import { cn } from "@/lib/utils/cn";
+import { formatNotificationText } from "@/lib/utils/notification";
 
 type NotificationItem = {
   id: string;
@@ -164,6 +165,7 @@ export default function NotificationDropdown() {
                       label: n.type.replace(/_/g, " "),
                       className: "bg-gray-50 text-gray-600 border-gray-150",
                     };
+                    const { title: displayTitle, message: displayMessage } = formatNotificationText(n.title, n.message);
 
                     const handleItemClick = async () => {
                       if (!n.isRead) {
@@ -192,7 +194,7 @@ export default function NotificationDropdown() {
                               "text-sm truncate",
                               n.isRead ? "text-gray-700 font-medium" : "text-gray-900 font-semibold"
                             )}>
-                              {n.title}
+                              {displayTitle}
                             </p>
                             {!n.isRead && (
                               <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />
@@ -202,7 +204,7 @@ export default function NotificationDropdown() {
                             "text-xs line-clamp-2",
                             n.isRead ? "text-gray-500" : "text-gray-600"
                           )}>
-                            {n.message}
+                            {displayMessage}
                           </p>
                           <div className="flex items-center flex-wrap gap-2 text-[10px] text-gray-400 pt-1">
                             <div className="flex items-center gap-1 font-medium">

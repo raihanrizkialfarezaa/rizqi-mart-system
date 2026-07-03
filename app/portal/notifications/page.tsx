@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Bell, AlertCircle, Clock, Package, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { formatNotificationText } from "@/lib/utils/notification";
 
 type Notification = {
   id: string;
@@ -101,6 +102,7 @@ export default function PortalNotifications() {
           {notifications.map((notification) => {
             const Icon = ICONS[notification.type] || Bell;
             const tag = PRIORITY_TAGS[notification.priority] || PRIORITY_TAGS.MEDIUM;
+            const { title: displayTitle, message: displayMessage } = formatNotificationText(notification.title, notification.message);
             return (
               <button
                 key={notification.id}
@@ -123,7 +125,7 @@ export default function PortalNotifications() {
                         "text-sm font-semibold",
                         notification.isRead ? "text-gray-600" : "text-gray-900"
                       )}>
-                        {notification.title}
+                        {displayTitle}
                       </p>
                       {!notification.isRead && (
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
@@ -136,7 +138,7 @@ export default function PortalNotifications() {
                       {tag.label}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-600 leading-relaxed">{notification.message}</p>
+                  <p className="mt-1 text-xs text-gray-600 leading-relaxed">{displayMessage}</p>
                   <p className="mt-2 text-[10px] text-gray-400 font-medium">
                     {new Date(notification.createdAt).toLocaleDateString("id-ID", {
                       day: "numeric",
