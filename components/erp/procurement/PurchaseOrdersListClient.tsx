@@ -296,6 +296,7 @@ export default function PurchaseOrdersListClient({
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   const [showManualItemModal, setShowManualItemModal] = useState(false);
+  const [viewingPo, setViewingPo] = useState<POItem | null>(null);
 
   // Product modal states
   const [showProductModal, setShowProductModal] = useState(false);
@@ -2202,6 +2203,13 @@ export default function PurchaseOrdersListClient({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setViewingPo(po)}
+                          className="rounded bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 p-1 text-xs font-bold transition-all"
+                          title="Detail PO"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
                         {po.status === "ORDERED" && (
                           <button
                             onClick={() => handleOpenReceive(po)}
@@ -2535,6 +2543,156 @@ export default function PurchaseOrdersListClient({
                 className="flex-1 rounded border border-gray-300 bg-white text-gray-700 py-2.5 text-xs font-semibold hover:bg-gray-50"
               >
                 Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Detail Purchase Order Modal */}
+      {viewingPo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Detail Purchase Order</h3>
+                <p className="text-xs text-gray-500 mt-1">Status dan rincian transaksi resmi ke supplier.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingPo(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg font-bold p-2"
+              >
+                Tutup
+              </button>
+            </div>
+
+            {/* Header Ringkasan PO */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl text-left text-sm">
+              <div className="space-y-1">
+                <p className="text-gray-500">No. Purchase Order (PO)</p>
+                <p className="font-bold text-gray-900 text-base">{viewingPo.poNumber}</p>
+                
+                <p className="text-gray-500 pt-2">Supplier</p>
+                <p className="font-semibold text-gray-800">{viewingPo.supplier.name}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-gray-500">Tujuan Pengadaan</p>
+                <p className="font-semibold text-gray-800">{viewingPo.purpose}</p>
+
+                <p className="text-gray-500 pt-2">Tanggal Dibuat</p>
+                <p className="font-semibold text-gray-800">
+                  {new Date(viewingPo.createdAt).toLocaleDateString("id-ID", {
+                    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+                  })}
+                </p>
+              </div>
+            </div>
+
+            {/* Status Status */}
+            <div className="flex flex-wrap gap-4 text-xs font-semibold">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500 font-medium">Status PO:</span>
+                <span className={cn("rounded-full border px-2.5 py-0.5 leading-relaxed", PO_STATUS_LABELS[viewingPo.status]?.color || "bg-gray-100 text-gray-700")}>
+                  {PO_STATUS_LABELS[viewingPo.status]?.label || viewingPo.status}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500 font-medium">Status Pembayaran:</span>
+                <span className={cn("rounded-full border px-2.5 py-0.5 leading-relaxed", PAYMENT_STATUS_LABELS[viewingPo.paymentStatus]?.color || "bg-gray-100 text-gray-700")}>
+                  {PAYMENT_STATUS_LABELS[viewingPo.paymentStatus]?.label || viewingPo.paymentStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Daftar Item PO */}
+            <div className="space-y-2 text-left">
+              <h4 className="text-sm font-bold text-gray-900">Rincian Barang yang Dipesan</h4>
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-gray-500 font-bold">
+                      <th className="px-4 py-3">Nama Produk</th>
+                      <th className="px-4 py-3 text-right">Qty</th>
+                      <th className="px-4 py-3">Satuan</th>
+                      <th className="px-4 py-3 text-right">Harga Satuan</th>
+                      <th className="px-4 py-3 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {viewingPo.items.map((item) => {
+                      const prod = productList.find((p) => p.id === item.productId);
+                      const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
+                      const factor = unitObj?.conversionToBase || 1;
+                      const baseUnitCode = prod?.baseUnitCode || "PCS";
+                      const hasConversion = factor > 1;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-gray-900">{item.product.name}</p>
+                            <p className="text-[10px] text-gray-400">SKU: {item.product.sku}</p>
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-xs sm:text-sm">
+                            <div className="font-bold text-gray-900">{item.qty}</div>
+                            {hasConversion && (
+                              <div className="mt-1 inline-block rounded-md bg-amber-100 border border-amber-300 px-2 py-0.5 text-xs font-black text-amber-900 whitespace-nowrap shadow-sm">
+                                Setara {item.qty * factor} {baseUnitCode}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-left">
+                            <div className="font-bold text-gray-950">{item.unit?.code || "PCS"}</div>
+                            {hasConversion && (
+                              <div className="mt-1 inline-block rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-[10px] font-extrabold text-gray-600 whitespace-nowrap">
+                                1 {item.unit?.code} = {factor} {baseUnitCode}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">{formatCurrency(item.unitCost)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-gray-950">{formatCurrency(item.subtotal)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Bukti & Catatan Pembayaran */}
+            {(viewingPo.paymentNotes || viewingPo.paymentProofUrl) && (
+              <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/30 text-left space-y-2 text-xs">
+                <h4 className="font-bold text-gray-900">Detail Pembayaran Supplier</h4>
+                {viewingPo.paymentNotes && (
+                  <p className="text-gray-600"><span className="font-bold">Catatan:</span> {viewingPo.paymentNotes}</p>
+                )}
+                {viewingPo.paymentProofUrl && (
+                  <div className="pt-1">
+                    <a
+                      href={viewingPo.paymentProofUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-bold text-primary hover:underline border border-primary/20 bg-primary/5 rounded px-2.5 py-1"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Lihat Bukti Transfer Resmi
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Total Footer */}
+            <div className="flex justify-between items-center border-t pt-4 font-bold text-base">
+              <span className="text-gray-700">Total Keseluruhan PO</span>
+              <span className="text-primary text-lg">{formatCurrency(viewingPo.totalAmount)}</span>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setViewingPo(null)}
+                className="rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-6 py-2.5 text-sm font-bold shadow-sm"
+              >
+                Tutup
               </button>
             </div>
           </div>
