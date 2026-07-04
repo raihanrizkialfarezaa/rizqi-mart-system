@@ -847,6 +847,15 @@ export default function PurchaseOrdersListClient({
 
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
+  // Search, Filter, Sort, Pagination States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [paymentFilter, setPaymentFilter] = useState("ALL");
+  const [shortageFilter, setShortageFilter] = useState("ALL");
+  const [sortBy, setSortBy] = useState("LATEST");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   function triggerNotification(message: string, type: "success" | "error" = "success") {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -1123,6 +1132,73 @@ export default function PurchaseOrdersListClient({
       setSubmittingPayment(false);
     }
   }
+
+  // 1. Filter Purchase Orders
+  const filteredPos = pos.filter((po) => {
+    // Status filter
+    if (statusFilter !== "ALL" && po.status !== statusFilter) return false;
+
+    // Payment filter
+    if (paymentFilter !== "ALL" && po.paymentStatus !== paymentFilter) return false;
+
+    // Discrepancy filter
+    const isReceived = po.status === "RECEIVED";
+    let hasDiscrepancy = false;
+    if (isReceived && po.goodsReceipts && po.goodsReceipts.length > 0) {
+      po.items.forEach((item) => {
+        const prod = productList.find((p) => p.id === item.productId);
+        const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
+        const factor = unitObj?.conversionToBase || 1;
+        const receivedBase = (po.goodsReceipts || [])
+          ?.flatMap((gr) => gr.stockBatches)
+          .filter((sb) => sb.productId === item.productId)
+          .reduce((sum, sb) => sum + sb.qtyReceivedBase, 0) || 0;
+        const orderedBase = item.qty * factor;
+        if (receivedBase < orderedBase) hasDiscrepancy = true;
+      });
+    }
+
+    if (shortageFilter === "MINUS" && !hasDiscrepancy) return false;
+    if (shortageFilter === "OK" && hasDiscrepancy) return false;
+
+    // Search query filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchPoNo = po.poNumber.toLowerCase().includes(q);
+      const matchSupplier = po.supplier.name.toLowerCase().includes(q);
+      const matchProduct = po.items.some((it) => it.product.name.toLowerCase().includes(q));
+      if (!matchPoNo && !matchSupplier && !matchProduct) return false;
+    }
+
+    return true;
+  });
+
+  // 2. Sort Purchase Orders
+  const sortedPos = [...filteredPos].sort((a, b) => {
+    switch (sortBy) {
+      case "OLDEST":
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case "AMOUNT_DESC":
+        return b.totalAmount - a.totalAmount;
+      case "AMOUNT_ASC":
+        return a.totalAmount - b.totalAmount;
+      case "PO_ASC":
+        return a.poNumber.localeCompare(b.poNumber);
+      case "PO_DESC":
+        return b.poNumber.localeCompare(a.poNumber);
+      case "LATEST":
+      default:
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+  });
+
+  // 3. Paginate Purchase Orders
+  const totalItems = sortedPos.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const clampedPage = Math.min(Math.max(1, currentPage), totalPages);
+  
+  const startIndex = (clampedPage - 1) * pageSize;
+  const paginatedPos = sortedPos.slice(startIndex, startIndex + pageSize);
 
   return (
     <div className="space-y-6">
@@ -2260,6 +2336,97 @@ export default function PurchaseOrdersListClient({
         </div>
       )}
 
+      {/* Search, Filter, Sort Controls Panel */}
+      <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        {/* Search Input */}
+        <div className="relative flex-1 min-w-[200px]">
+          <input
+            type="text"
+            placeholder="Cari No. PO, supplier, atau produk..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full rounded-lg border border-gray-300 pl-9 pr-4 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-gray-800 bg-gray-50/50"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+        </div>
+
+        {/* Filter Status PO */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status PO:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="ALL">Semua Status</option>
+            <option value="DRAFT">DRAFT</option>
+            <option value="ORDERED">ORDERED (Dipesan)</option>
+            <option value="RECEIVED">RECEIVED (Diterima)</option>
+            <option value="CANCELLED">CANCELLED (Batal)</option>
+          </select>
+        </div>
+
+        {/* Filter Pembayaran */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Pembayaran:</span>
+          <select
+            value={paymentFilter}
+            onChange={(e) => {
+              setPaymentFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="ALL">Semua Pembayaran</option>
+            <option value="BELUM_BAYAR">Belum Bayar</option>
+            <option value="LUNAS">Lunas</option>
+          </select>
+        </div>
+
+        {/* Filter Selisih/Minus */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Kondisi:</span>
+          <select
+            value={shortageFilter}
+            onChange={(e) => {
+              setShortageFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="ALL">Semua Kondisi</option>
+            <option value="MINUS">⚠️ Ada Minus / Kurang</option>
+            <option value="OK">✓ Lengkap (Sesuai PO)</option>
+          </select>
+        </div>
+
+        {/* Sort PO */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Urutan:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="LATEST">Tanggal Terbaru</option>
+            <option value="OLDEST">Tanggal Terlama</option>
+            <option value="AMOUNT_DESC">Nominal Tertinggi</option>
+            <option value="AMOUNT_ASC">Nominal Terendah</option>
+            <option value="PO_ASC">Nomor PO (A-Z)</option>
+            <option value="PO_DESC">Nomor PO (Z-A)</option>
+          </select>
+        </div>
+      </div>
+
       {/* Main PO Table */}
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -2269,7 +2436,7 @@ export default function PurchaseOrdersListClient({
                 <th className="px-4 py-3">No. PO</th>
                 <th className="px-4 py-3">Supplier</th>
                 <th className="px-4 py-3">Tujuan</th>
-                <th className="px-4 py-3 text-center">Item</th>
+                <th className="px-4 py-3">Detail Item &amp; Selisih</th>
                 <th className="px-4 py-3 text-right">Total Amount</th>
                 <th className="px-4 py-3">Pembayaran</th>
                 <th className="px-4 py-3">Status PO</th>
@@ -2277,7 +2444,7 @@ export default function PurchaseOrdersListClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {pos.map((po) => {
+              {paginatedPos.map((po) => {
                 const status = PO_STATUS_LABELS[po.status] || { label: po.status, color: "bg-gray-100 text-gray-700" };
                 const payment = PAYMENT_STATUS_LABELS[po.paymentStatus] || { label: po.paymentStatus, color: "bg-gray-100 text-gray-700" };
 
@@ -2286,12 +2453,15 @@ export default function PurchaseOrdersListClient({
                 let hasDiscrepancy = false;
                 
                 if (isReceived && po.goodsReceipts && po.goodsReceipts.length > 0) {
+                  (po.goodsReceipts || []).forEach((gr) => {
+                    // Make sure we have fallback loop for discrepancy calculation
+                  });
                   po.items.forEach((item) => {
                     const prod = productList.find((p) => p.id === item.productId);
                     const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
                     const factor = unitObj?.conversionToBase || 1;
                     
-                    const receivedBase = po.goodsReceipts
+                    const receivedBase = (po.goodsReceipts || [])
                       ?.flatMap((gr) => gr.stockBatches)
                       .filter((sb) => sb.productId === item.productId)
                       .reduce((sum, sb) => sum + sb.qtyReceivedBase, 0) || 0;
@@ -2315,7 +2485,64 @@ export default function PurchaseOrdersListClient({
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-800">{po.supplier.name}</td>
                     <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{po.purpose}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{po.items.length}</td>
+                    <td className="px-4 py-3 text-left max-w-xs">
+                      <div className="flex flex-col gap-2">
+                        {po.items.map((item) => {
+                          const prod = productList.find((p) => p.id === item.productId);
+                          const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
+                          const factor = unitObj?.conversionToBase || 1;
+                          const baseUnitCode = prod?.baseUnitCode || "PCS";
+                          
+                          const receivedBase = (po.goodsReceipts || [])
+                            ?.flatMap((gr) => gr.stockBatches)
+                            .filter((sb) => sb.productId === item.productId)
+                            .reduce((sum, sb) => sum + sb.qtyReceivedBase, 0) || 0;
+                          
+                          const orderedBase = item.qty * factor;
+                          const isPoReceived = po.status === "RECEIVED";
+                          const isMinus = isPoReceived && (receivedBase < orderedBase);
+                          
+                          const qtyReceivedUnit = receivedBase / factor;
+                          const minusQtyUnit = item.qty - qtyReceivedUnit;
+                          const minusQtyBase = orderedBase - receivedBase;
+
+                          return (
+                            <div key={item.id} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50/40 space-y-1.5 shadow-sm text-[11px]">
+                              {/* Product Name */}
+                              <div className="font-bold text-gray-900 leading-tight">
+                                {item.product.name}
+                              </div>
+                              
+                              {/* Qty & Conversion Info */}
+                              <div className="flex flex-wrap items-center gap-1">
+                                {/* Ordered Qty */}
+                                <span className="bg-slate-100 border border-slate-200 text-slate-800 px-1.5 py-0.5 rounded font-extrabold uppercase text-[9px]">
+                                  PO: {item.qty} {item.unit?.code || "PCS"}
+                                </span>
+
+                                {/* Conversion info if factor > 1 */}
+                                {factor > 1 && (
+                                  <span className="bg-amber-50 border border-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-bold text-[9px] whitespace-nowrap">
+                                    1 {item.unit?.code} = {factor} {baseUnitCode} ({item.qty * factor} {baseUnitCode})
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Shortage info if minus */}
+                              {isMinus && (
+                                <div className="inline-flex items-center gap-1 bg-red-100 border border-red-300 text-[9px] font-black text-red-800 px-1.5 py-0.5 rounded animate-pulse shadow-sm">
+                                  <span>⚠️ Kurang:</span>
+                                  <span>
+                                    {minusQtyUnit} {item.unit?.code || "PCS"}
+                                    {factor > 1 && ` (${minusQtyBase} ${baseUnitCode})`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right font-bold text-gray-950">{formatCurrency(po.totalAmount)}</td>
                     <td className="px-4 py-3">
                       <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold leading-relaxed", payment.color)}>
@@ -2371,10 +2598,10 @@ export default function PurchaseOrdersListClient({
                   </tr>
                 );
               })}
-              {pos.length === 0 && (
+              {paginatedPos.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-gray-400 font-medium bg-gray-50/50">
-                    Belum ada Purchase Order
+                    Belum ada Purchase Order yang cocok dengan filter pencarian
                   </td>
                 </tr>
               )}
@@ -2382,6 +2609,67 @@ export default function PurchaseOrdersListClient({
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="bg-white border-t border-gray-100 px-4 py-3.5 flex items-center justify-between rounded-b-xl border-x border-b shadow-sm text-xs font-semibold text-gray-500">
+          <div className="flex items-center gap-1.5">
+            <span>Tampilkan</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs font-bold bg-white text-gray-700 focus:outline-none"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+            <span>dari {totalItems} PO</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={clampedPage === 1}
+              className="px-3 py-1.5 border rounded-lg bg-white hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-500 transition-all font-bold"
+            >
+              Sebelumnya
+            </button>
+            
+            <div className="hidden sm:flex items-center gap-1">
+              {Array.from({ length: totalPages }).map((_, idx) => {
+                const p = idx + 1;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setCurrentPage(p)}
+                    className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center border font-bold transition-all",
+                      clampedPage === p
+                        ? "bg-primary text-white border-primary"
+                        : "bg-white hover:bg-gray-50 text-gray-700 hover:text-gray-900"
+                    )}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={clampedPage === totalPages}
+              className="px-3 py-1.5 border rounded-lg bg-white hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-500 transition-all font-bold"
+            >
+              Berikutnya
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Receive Goods Modal */}
       {receivingPo && (
