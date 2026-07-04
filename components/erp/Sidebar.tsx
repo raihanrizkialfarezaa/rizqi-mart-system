@@ -45,12 +45,19 @@ const navGroups: NavGroup[] = [
       { label: "Buat Pesanan", href: "/erp/orders/new", icon: Plus },
     ],
   },
+  {
+    label: "Pengadaan",
+    icon: Truck,
+    children: [
+      { label: "Sourcing Barang", href: "/erp/procurement", icon: List },
+      { label: "Purchase Order (PO)", href: "/erp/procurement/purchase-orders", icon: List },
+    ],
+  },
 ];
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/erp", icon: LayoutDashboard },
   { label: "Inventori", href: "/erp/inventory", icon: Boxes },
-  { label: "Pengadaan", href: "/erp/procurement", icon: Truck },
   { label: "Keuangan", href: "/erp/finance", icon: Wallet },
   { label: "AI Assistant", href: "/erp/ai-assistant", icon: BrainCircuit },
 ];
