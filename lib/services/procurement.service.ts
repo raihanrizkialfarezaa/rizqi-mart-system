@@ -457,3 +457,48 @@ export async function getSourcingRequests(filters: {
     take: filters.limit || 50,
   });
 }
+
+/**
+ * Update GoodsReceipt notes and associated StockBatch quantities
+ */
+export async function updateGoodsReceipt(input: {
+  goodsReceiptId: string;
+  items: Array<{
+    productId: string;
+    qtyReceivedBase: Decimal | number;
+  }>;
+  notes?: string;
+}) {
+  const { goodsReceiptId, items, notes } = input;
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Update GoodsReceipt notes
+    await tx.goodsReceipt.update({
+      where: { id: goodsReceiptId },
+      data: { notes: notes || null },
+    });
+
+    // 2. Update each StockBatch associated with this GoodsReceipt
+    for (const item of items) {
+      const batch = await tx.stockBatch.findFirst({
+        where: {
+          goodsReceiptId,
+          productId: item.productId,
+        },
+      });
+
+      if (batch) {
+        const newQty = toDecimal(item.qtyReceivedBase).toNumber();
+        const diff = newQty - Number(batch.qtyReceivedBase);
+        
+        await tx.stockBatch.update({
+          where: { id: batch.id },
+          data: {
+            qtyReceivedBase: newQty,
+            qtyRemainingBase: Math.max(0, Number(batch.qtyRemainingBase) + diff),
+          },
+        });
+      }
+    }
+  });
+}

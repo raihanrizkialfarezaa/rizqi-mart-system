@@ -14,6 +14,16 @@ export default async function PurchaseOrdersPage() {
           unit: { select: { id: true, code: true } },
         },
       },
+      goodsReceipts: {
+        include: {
+          stockBatches: {
+            select: {
+              productId: true,
+              qtyReceivedBase: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -42,6 +52,15 @@ export default async function PurchaseOrdersPage() {
       unitCost: Number(i.unitCost),
       subtotal: Number(i.subtotal),
       sourcingRequestId: i.sourcingRequestId,
+    })),
+    goodsReceipts: po.goodsReceipts.map((gr) => ({
+      id: gr.id,
+      receivedAt: gr.receivedAt.toISOString(),
+      notes: gr.notes,
+      stockBatches: gr.stockBatches.map((sb) => ({
+        productId: sb.productId,
+        qtyReceivedBase: Number(sb.qtyReceivedBase),
+      })),
     })),
   }));
 

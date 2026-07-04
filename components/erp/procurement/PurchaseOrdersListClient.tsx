@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -34,6 +34,15 @@ type POItem = {
     unitCost: number;
     subtotal: number;
     sourcingRequestId: string | null;
+  }>;
+  goodsReceipts?: Array<{
+    id: string;
+    receivedAt: string;
+    notes: string | null;
+    stockBatches: Array<{
+      productId: string;
+      qtyReceivedBase: number;
+    }>;
   }>;
 };
 
@@ -260,6 +269,18 @@ export default function PurchaseOrdersListClient({
   const [pos, setPos] = useState<POItem[]>(initialPos);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
   const [productList, setProductList] = useState<ProductProp[]>(products);
+
+  useEffect(() => {
+    setPos(initialPos);
+  }, [initialPos]);
+
+  useEffect(() => {
+    setSuppliers(initialSuppliers);
+  }, [initialSuppliers]);
+
+  useEffect(() => {
+    setProductList(products);
+  }, [products]);
 
   // Modals state
   const [showPoForm, setShowPoForm] = useState(false);
@@ -803,6 +824,14 @@ export default function PurchaseOrdersListClient({
   const [receivingPo, setReceivingPo] = useState<POItem | null>(null);
   const [receiveItems, setReceiveItems] = useState<Record<string, { qty: number; batchCode: string; expiryDate: string }>>({});
   const [submittingReceive, setSubmittingReceive] = useState(false);
+  const [receiveNotes, setReceiveNotes] = useState("");
+
+  // Edit Goods Receipt Modal States
+  const [editingReceipt, setEditingReceipt] = useState<any | null>(null);
+  const [editingReceiptItems, setEditingReceiptItems] = useState<Record<string, string>>({});
+  const editingReceiptItemsRef = useRef<Record<string, string>>({});
+  const [editingReceiptNotes, setEditingReceiptNotes] = useState("");
+  const [submittingEditReceipt, setSubmittingEditReceipt] = useState(false);
 
   // Payment Modal State
   const [payingPo, setPayingPo] = useState<POItem | null>(null);
@@ -922,6 +951,7 @@ export default function PurchaseOrdersListClient({
   // Open Receive Goods Modal
   function handleOpenReceive(po: POItem) {
     setReceivingPo(po);
+    setReceiveNotes(""); // Reset notes
     const initialItems: Record<string, any> = {};
     const today = new Date().toISOString().slice(2, 10).replace(/-/g, "");
 
@@ -960,7 +990,7 @@ export default function PurchaseOrdersListClient({
       const res = await fetch(`/api/procurement/purchase-orders/${receivingPo.id}/receive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: itemsToSubmit }),
+        body: JSON.stringify({ items: itemsToSubmit, notes: receiveNotes }),
       });
 
       const json = await res.json();
@@ -969,10 +999,76 @@ export default function PurchaseOrdersListClient({
       setOrdersReceivedState(receivingPo.id);
       setReceivingPo(null);
       triggerNotification(`PO ${receivingPo.poNumber} berhasil diterima & stok gudang diperbarui!`);
+      router.refresh();
     } catch (err: any) {
       alert(err.message || "Gagal memproses penerimaan");
     } finally {
       setSubmittingReceive(false);
+    }
+  }
+
+  function handleOpenEditReceipt(po: POItem, gr: any) {
+    setEditingReceipt({ po, gr });
+    setEditingReceiptNotes(gr.notes || "");
+    
+    const itemsMap: Record<string, string> = {};
+    po.items.forEach((item, index) => {
+      const prod = productList.find((p) => p.id === item.productId);
+      const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
+      const factor = unitObj?.conversionToBase || 1;
+      
+      const sb = gr.stockBatches.find((s: any) => s.productId === item.productId);
+      const qtyBase = sb ? sb.qtyReceivedBase : 0;
+      itemsMap[String(index)] = String(qtyBase / factor);
+    });
+    editingReceiptItemsRef.current = itemsMap;
+    setEditingReceiptItems(itemsMap);
+  }
+
+  async function handleConfirmEditReceipt() {
+    if (!editingReceipt) return;
+    setSubmittingEditReceipt(true);
+    try {
+      const po = editingReceipt.po as POItem;
+      const gr = editingReceipt.gr;
+      
+      // Read from ref to always get the latest typed values (immune to HMR/stale state)
+      const latestItems = editingReceiptItemsRef.current;
+
+      const itemsToSubmit = po.items.map((item: any, index: number) => {
+        const qtyStr = latestItems[String(index)] || "0";
+        const qty = parseFloat(qtyStr.replace(/,/g, ".")) || 0;
+        const prod = productList.find((p) => p.id === item.productId);
+        const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
+        const factor = unitObj?.conversionToBase || 1;
+        
+        return {
+          productId: item.productId,
+          qtyReceivedBase: qty * factor,
+        };
+      });
+      
+      const res = await fetch(`/api/procurement/purchase-orders/${po.id}/receive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goodsReceiptId: gr.id,
+          items: itemsToSubmit,
+          notes: editingReceiptNotes,
+        }),
+      });
+      
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal memperbarui penerimaan");
+      
+      setEditingReceipt(null);
+      setViewingPo(null);
+      triggerNotification(`Penerimaan barang PO ${po.poNumber} berhasil diperbarui!`);
+      router.refresh();
+    } catch (err: any) {
+      alert(err.message || "Gagal memperbarui penerimaan");
+    } finally {
+      setSubmittingEditReceipt(false);
     }
   }
 
@@ -2184,9 +2280,39 @@ export default function PurchaseOrdersListClient({
               {pos.map((po) => {
                 const status = PO_STATUS_LABELS[po.status] || { label: po.status, color: "bg-gray-100 text-gray-700" };
                 const payment = PAYMENT_STATUS_LABELS[po.paymentStatus] || { label: po.paymentStatus, color: "bg-gray-100 text-gray-700" };
+
+                // Detect if received PO has any minus/shortage
+                const isReceived = po.status === "RECEIVED";
+                let hasDiscrepancy = false;
+                
+                if (isReceived && po.goodsReceipts && po.goodsReceipts.length > 0) {
+                  po.items.forEach((item) => {
+                    const prod = productList.find((p) => p.id === item.productId);
+                    const unitObj = prod?.units.find((u) => u.id === item.unitId || u.code === item.unit.code);
+                    const factor = unitObj?.conversionToBase || 1;
+                    
+                    const receivedBase = po.goodsReceipts
+                      ?.flatMap((gr) => gr.stockBatches)
+                      .filter((sb) => sb.productId === item.productId)
+                      .reduce((sum, sb) => sum + sb.qtyReceivedBase, 0) || 0;
+                    
+                    const orderedBase = item.qty * factor;
+                    if (receivedBase < orderedBase) {
+                      hasDiscrepancy = true;
+                    }
+                  });
+                }
+
                 return (
                   <tr key={po.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-gray-900">{po.poNumber}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-gray-900">{po.poNumber}</div>
+                      {hasDiscrepancy && (
+                        <div className="mt-1 inline-flex items-center gap-0.5 rounded bg-red-100 border border-red-300 px-1.5 py-0.5 text-[10px] font-black text-red-800 uppercase tracking-wider animate-pulse shadow-sm">
+                          <span>⚠️</span> Ada Minus
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium text-gray-800">{po.supplier.name}</td>
                     <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{po.purpose}</td>
                     <td className="px-4 py-3 text-center text-gray-600">{po.items.length}</td>
@@ -2338,9 +2464,16 @@ export default function PurchaseOrdersListClient({
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       <div>
-                        <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1.5">
-                          Qty Diterima
-                        </label>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider">
+                            Qty Diterima
+                          </label>
+                          {rItem.qty < item.qty && (
+                            <span className="inline-flex items-center gap-0.5 bg-red-100 border border-red-300 text-[10px] font-black text-red-700 px-1.5 py-0.5 rounded-full shrink-0 animate-pulse">
+                              ⚠️ Kurang {item.qty - rItem.qty} {item.unit.code}
+                            </span>
+                          )}
+                        </div>
                         <div className="relative">
                           <input
                             type="number"
@@ -2353,7 +2486,12 @@ export default function PurchaseOrdersListClient({
                                 [item.id]: { ...rItem, qty: isNaN(val) ? 0 : val }
                               });
                             }}
-                            className="w-full rounded-xl border-2 border-gray-300 pl-4 pr-16 py-2.5 text-base font-extrabold text-gray-800 focus:outline-none focus:border-primary transition-all h-[52px]"
+                            className={cn(
+                              "w-full rounded-xl border-2 pl-4 pr-16 py-2.5 text-base font-extrabold transition-all h-[52px]",
+                              rItem.qty < item.qty
+                                ? "border-red-300 bg-red-50/30 text-red-900 focus:border-red-500"
+                                : "border-gray-300 text-gray-800 focus:border-primary"
+                            )}
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200 uppercase">
                             {item.unit.code}
@@ -2402,6 +2540,20 @@ export default function PurchaseOrdersListClient({
                   </div>
                 );
               })}
+            </div>
+
+            {/* Catatan Selisih / Penerimaan Barang */}
+            <div className="text-left space-y-1.5 mb-4">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Catatan Penerimaan / Penagihan Selisih (Discrepancy Notes)
+              </label>
+              <textarea
+                placeholder="Tulis jika ada barang yang kurang/minus, misalnya: 'Susu kurang 2 pack, sudah ditagih ke toko dan dijanjikan dikirim besok.'"
+                value={receiveNotes}
+                onChange={(e) => setReceiveNotes(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-gray-300 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-gray-800 font-semibold bg-gray-50/50"
+              />
             </div>
 
             <div className="flex gap-3 mt-6 border-t pt-4">
@@ -2626,6 +2778,17 @@ export default function PurchaseOrdersListClient({
                       const baseUnitCode = prod?.baseUnitCode || "PCS";
                       const hasConversion = factor > 1;
 
+                      const receivedBase = viewingPo.goodsReceipts
+                        ?.flatMap((gr) => gr.stockBatches)
+                        .filter((sb) => sb.productId === item.productId)
+                        .reduce((sum, sb) => sum + sb.qtyReceivedBase, 0) || 0;
+                      
+                      const isPoReceived = viewingPo.status === "RECEIVED";
+                      const orderedBase = item.qty * factor;
+                      const isMinus = isPoReceived && (receivedBase < orderedBase);
+                      const qtyReceivedUnit = receivedBase / factor;
+                      const minusQtyUnit = item.qty - qtyReceivedUnit;
+
                       return (
                         <tr key={item.id} className="hover:bg-gray-50/50">
                           <td className="px-4 py-3">
@@ -2637,6 +2800,11 @@ export default function PurchaseOrdersListClient({
                             {hasConversion && (
                               <div className="mt-1 inline-block rounded-md bg-amber-100 border border-amber-300 px-2 py-0.5 text-xs font-black text-amber-900 whitespace-nowrap shadow-sm">
                                 Setara {item.qty * factor} {baseUnitCode}
+                              </div>
+                            )}
+                            {isMinus && (
+                              <div className="mt-1 block rounded-md bg-red-100 border border-red-300 px-2 py-0.5 text-[11px] font-black text-red-700 whitespace-nowrap shadow-sm">
+                                ⚠️ Kurang {minusQtyUnit} {item.unit?.code || "PCS"} (Datang {qtyReceivedUnit})
                               </div>
                             )}
                           </td>
@@ -2680,6 +2848,52 @@ export default function PurchaseOrdersListClient({
               </div>
             )}
 
+            {/* Log Penerimaan Barang & Selisih */}
+            {viewingPo.goodsReceipts && viewingPo.goodsReceipts.length > 0 && (
+              <div className="border border-gray-100 rounded-xl p-4 bg-gray-50/30 text-left space-y-3 text-xs">
+                <h4 className="font-bold text-gray-900 flex items-center gap-1.5">
+                  <span>📦</span> Log Penerimaan Barang & Selisih Gudang
+                </h4>
+                <div className="divide-y divide-gray-100 bg-white border rounded-xl overflow-hidden shadow-sm">
+                  {viewingPo.goodsReceipts.map((gr) => (
+                    <div key={gr.id} className="p-3.5 space-y-2">
+                      <div className="flex justify-between items-center text-gray-500 font-medium">
+                        <span>Tanggal Penerimaan:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-900 font-bold bg-gray-100 px-2 py-0.5 rounded border">
+                            {new Date(gr.receivedAt).toLocaleDateString("id-ID", {
+                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+                            })}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditReceipt(viewingPo, gr)}
+                            className="text-primary hover:text-primary/80 font-bold text-xs underline cursor-pointer"
+                          >
+                            Edit Log Penerimaan
+                          </button>
+                        </div>
+                      </div>
+                      {gr.notes ? (
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-950">
+                          <p className="font-black flex items-center gap-1">
+                            <span>⚠️</span> Catatan Selisih & Penagihan:
+                          </p>
+                          <p className="font-bold text-red-800 mt-1 leading-relaxed text-[11px] sm:text-xs">
+                            "{gr.notes}"
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-green-700 font-bold flex items-center gap-1">
+                          <span>✓</span> Diterima lengkap sesuai PO (tidak ada minus).
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Total Footer */}
             <div className="flex justify-between items-center border-t pt-4 font-bold text-base">
               <span className="text-gray-700">Total Keseluruhan PO</span>
@@ -2695,6 +2909,228 @@ export default function PurchaseOrdersListClient({
                 Tutup
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Goods Receipt Modal */}
+      {editingReceipt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3 mb-4">
+              <h3 className="text-base font-bold text-gray-950">Koreksi &amp; Edit Penerimaan Barang</h3>
+              <button onClick={() => setEditingReceipt(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Sesuaikan kuantitas barang yang benar-benar diterima jika ada kesalahan input sebelumnya. Stok fisik gudang akan disesuaikan secara otomatis.
+            </p>
+
+            <form
+              id="editReceiptForm"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const formData = new FormData(form);
+                const po = editingReceipt.po;
+                const gr = editingReceipt.gr;
+
+                const itemsToSubmit = po.items.map((item: any, index: number) => {
+                  const qtyStr = (formData.get(`qty_${index}`) as string) || "0";
+                  const qty = parseFloat(qtyStr.replace(/,/g, ".")) || 0;
+                  const prod = productList.find((p) => p.id === item.productId);
+                  const unitObj = prod?.units.find((u: any) => u.id === item.unitId || u.code === item.unit.code);
+                  const factor = unitObj?.conversionToBase || 1;
+                  return {
+                    productId: item.productId,
+                    qtyReceivedBase: qty * factor,
+                  };
+                });
+
+                const notesVal = (formData.get("receipt_notes") as string) || "";
+
+                setSubmittingEditReceipt(true);
+                try {
+                  const res = await fetch(`/api/procurement/purchase-orders/${po.id}/receive`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      goodsReceiptId: gr.id,
+                      items: itemsToSubmit,
+                      notes: notesVal,
+                    }),
+                  });
+                  const json = await res.json();
+                  if (!res.ok) throw new Error(json.error || "Gagal memperbarui penerimaan");
+
+                  // Directly update local pos state to ensure immediate UI feedback
+                  setPos((prevPos) =>
+                    prevPos.map((itemPo) => {
+                      if (itemPo.id !== po.id) return itemPo;
+                      return {
+                        ...itemPo,
+                        goodsReceipts: (itemPo.goodsReceipts || []).map((itemGr) => {
+                          if (itemGr.id !== gr.id) return itemGr;
+                          return {
+                            ...itemGr,
+                            notes: notesVal || null,
+                            stockBatches: itemGr.stockBatches.map((sb) => {
+                              const match = itemsToSubmit.find((i: any) => i.productId === sb.productId);
+                              if (match) {
+                                return {
+                                  ...sb,
+                                  qtyReceivedBase: match.qtyReceivedBase,
+                                };
+                              }
+                              return sb;
+                            }),
+                          };
+                        }),
+                      };
+                    })
+                  );
+
+                  setEditingReceipt(null);
+                  setViewingPo(null);
+                  triggerNotification(`Penerimaan barang PO ${po.poNumber} berhasil diperbarui!`);
+                  router.refresh();
+                } catch (err: any) {
+                  alert(err.message || "Gagal memperbarui penerimaan");
+                } finally {
+                  setSubmittingEditReceipt(false);
+                }
+              }}
+            >
+              {/* Scrollable Items Container */}
+              <div className="max-h-[380px] overflow-y-auto pr-2 space-y-4 mb-4 text-left border rounded-xl p-3 bg-gray-50/20">
+                {editingReceipt.po.items.map((item: any, index: number) => {
+                  const prod = productList.find((p) => p.id === item.productId);
+                  const unitObj = prod?.units.find((u: any) => u.id === item.unitId || u.code === item.unit.code);
+                  const factor = unitObj?.conversionToBase || 1;
+
+                  const sb = editingReceipt.gr.stockBatches.find((s: any) => s.productId === item.productId);
+                  const qtyBase = sb ? sb.qtyReceivedBase : 0;
+                  const initialQty = qtyBase / factor;
+
+                  return (
+                    <div key={String(index)} className="border p-4 rounded-lg bg-gray-50/50 space-y-3">
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900">{item.product.name}</h4>
+                        <p className="text-xs font-extrabold text-gray-500 mt-0.5">
+                          Qty PO Dipesan: {item.qty} {item.unit.code}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider">
+                              Qty Diterima (Koreksi)
+                            </label>
+                            {/* Warning badge - updated via JS */}
+                            <span
+                              id={`warn_${index}`}
+                              className={cn(
+                                "inline-flex items-center gap-0.5 bg-red-100 border border-red-300 text-[10px] font-black text-red-700 px-1.5 py-0.5 rounded-full shrink-0 animate-pulse",
+                                initialQty < item.qty ? "" : "hidden"
+                              )}
+                            >
+                              ⚠️ Kurang {item.qty - initialQty} {item.unit.code}
+                            </span>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              name={`qty_${index}`}
+                              defaultValue={String(initialQty)}
+                              onInput={(e) => {
+                                const raw = (e.target as HTMLInputElement).value;
+                                const qty = parseFloat(raw.replace(/,/g, ".")) || 0;
+
+                                // Update conversion display
+                                const convEl = document.getElementById(`conv_${index}`);
+                                if (convEl) convEl.textContent = `${qty * factor} ${prod?.baseUnitCode || "PCS"}`;
+
+                                // Update warning badge
+                                const warnEl = document.getElementById(`warn_${index}`);
+                                if (warnEl) {
+                                  if (qty < item.qty) {
+                                    warnEl.textContent = `⚠️ Kurang ${item.qty - qty} ${item.unit.code}`;
+                                    warnEl.classList.remove("hidden");
+                                  } else {
+                                    warnEl.classList.add("hidden");
+                                  }
+                                }
+
+                                // Update input border color
+                                const inputEl = e.target as HTMLInputElement;
+                                if (qty < item.qty) {
+                                  inputEl.className = inputEl.className.replace("border-gray-300 text-gray-800 focus:border-primary", "border-red-300 bg-red-50/30 text-red-900 focus:border-red-500");
+                                } else {
+                                  inputEl.className = inputEl.className.replace("border-red-300 bg-red-50/30 text-red-900 focus:border-red-500", "border-gray-300 text-gray-800 focus:border-primary");
+                                }
+                              }}
+                              className={cn(
+                                "w-full rounded-xl border-2 pl-4 pr-16 py-2.5 text-base font-extrabold transition-all h-[52px]",
+                                initialQty < item.qty
+                                  ? "border-red-300 bg-red-50/30 text-red-900 focus:border-red-500"
+                                  : "border-gray-300 text-gray-800 focus:border-primary"
+                              )}
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200 uppercase">
+                              {item.unit.code}
+                            </span>
+                          </div>
+                        </div>
+
+                        {factor > 1 && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col justify-center">
+                            <p className="text-[10px] text-amber-800 font-extrabold uppercase">
+                              Konversi Eceran Setara:
+                            </p>
+                            <p id={`conv_${index}`} className="text-base font-black text-amber-950 mt-1">
+                              {initialQty * factor} {prod?.baseUnitCode || "PCS"}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Catatan Selisih */}
+              <div className="text-left space-y-1.5 mb-4">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Catatan Penerimaan / Penagihan Selisih (Koreksi)
+                </label>
+                <textarea
+                  name="receipt_notes"
+                  placeholder="Tulis alasan koreksi selisih..."
+                  defaultValue={editingReceipt.gr.notes || ""}
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-300 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-gray-800 font-semibold bg-gray-50/50"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6 border-t pt-4">
+                <button
+                  type="submit"
+                  disabled={submittingEditReceipt}
+                  className="flex-1 rounded bg-primary text-white py-2.5 text-xs font-semibold hover:bg-primary/95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {submittingEditReceipt && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Simpan Koreksi Penerimaan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingReceipt(null)}
+                  className="flex-1 rounded border border-gray-300 bg-white text-gray-700 py-2.5 text-xs font-semibold hover:bg-gray-50"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
