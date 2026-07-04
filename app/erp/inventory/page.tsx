@@ -61,7 +61,9 @@ export default async function InventoryPage() {
             <TH>SKU</TH>
             <TH>Produk</TH>
             <TH>Kategori</TH>
-            <TH className="text-right">Stok</TH>
+            <TH className="text-right">Stok Fisik</TH>
+            <TH className="text-right">Booking B2B</TH>
+            <TH className="text-right">Stok B2C</TH>
             <TH className="text-right">Min. Alert</TH>
             <TH className="text-center">Batch</TH>
             <TH>Expiry Terdekat</TH>
@@ -69,7 +71,7 @@ export default async function InventoryPage() {
         </THead>
         <TBody>
           {rows.length === 0 ? (
-            <EmptyRow colSpan={7} message="Tidak ada produk" />
+            <EmptyRow colSpan={9} message="Tidak ada produk" />
           ) : (
             rows.map((r) => (
               <TR key={r.id}>
@@ -83,9 +85,19 @@ export default async function InventoryPage() {
                   </span>
                 </TD>
                 <TD>{r.categoryName}</TD>
-                <TD className="text-right font-medium">
-                  <span className={r.isLow ? "text-red-600" : "text-gray-900"}>
-                    {r.totalStock} {r.baseUnitCode}
+                <TD className="text-right font-medium text-gray-900">
+                  {r.totalStock} {r.baseUnitCode}
+                </TD>
+                <TD className="text-right font-semibold text-blue-600">
+                  {Number(r.bookedStock) > 0 ? (
+                    <span className="rounded bg-blue-50 px-1.5 py-0.5 border border-blue-100 text-xs">
+                      {r.bookedStock} {r.baseUnitCode}
+                    </span>
+                  ) : "—"}
+                </TD>
+                <TD className="text-right font-semibold">
+                  <span className={r.isLow ? "text-red-600 font-bold" : "text-green-600"}>
+                    {r.b2cStock} {r.baseUnitCode}
                   </span>
                 </TD>
                 <TD className="text-right text-gray-500">{r.minStockAlert}</TD>

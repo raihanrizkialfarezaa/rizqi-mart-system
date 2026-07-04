@@ -263,7 +263,10 @@ export async function recordStockMovement(input: {
  * Get available stock untuk produk (sum dari semua batch)
  */
 export async function getAvailableStock(productId: string): Promise<Decimal> {
-  const batches = await prisma.stockBatch.findMany({
+  const client = prisma;
+
+  // 1. Get physical stock
+  const batches = await client.stockBatch.findMany({
     where: {
       productId,
       qtyRemainingBase: {
@@ -275,12 +278,45 @@ export async function getAvailableStock(productId: string): Promise<Decimal> {
     },
   });
 
-  const total = batches.reduce(
+  const physical = batches.reduce(
     (sum, batch) => sum.add(toDecimal(batch.qtyRemainingBase)),
     toDecimal(0)
   );
 
-  return total;
+  // 2. Get active B2B booked stock (status NOT SELESAI or DIBATALKAN)
+  const activeB2BItems = await client.salesOrderItem.findMany({
+    where: {
+      productId,
+      salesOrder: {
+        orderType: "B2B_GROSIR",
+        status: { notIn: ["SELESAI", "DIBATALKAN"] },
+      },
+    },
+    include: {
+      product: { select: { baseUnitId: true } },
+    },
+  });
+
+  let booked = toDecimal(0);
+  for (const item of activeB2BItems) {
+    let factor = 1;
+    if (item.unitId !== item.product.baseUnitId) {
+      const conv = await client.productUnitConversion.findUnique({
+        where: {
+          productId_unitId: {
+            productId: item.productId,
+            unitId: item.unitId,
+          },
+        },
+      });
+      if (conv) {
+        factor = Number(conv.conversionToBase);
+      }
+    }
+    booked = booked.add(multiplyDecimal(item.qty, factor));
+  }
+
+  return Decimal.max(0, physical.minus(booked));
 }
 
 /**

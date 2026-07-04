@@ -47,7 +47,8 @@ type Product = {
   unitConversions: Array<{
     id: string;
     unitId: string;
-    conversionFactor: number;
+    conversionFactor?: number;
+    conversionToBase?: number | string;
     unit: ProductUnit;
   }>;
   sellingPrices: ProductSellPrice[];
@@ -92,6 +93,26 @@ export default function OrderBuilder() {
   }>>([]);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [requestForm, setRequestForm] = useState({ name: "", qty: "", unit: "", notes: "" });
+  const [existingProductMatch, setExistingProductMatch] = useState<Product | null>(null);
+
+  useEffect(() => {
+    if (!requestForm.name.trim()) {
+      setExistingProductMatch(null);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products/search?q=${encodeURIComponent(requestForm.name.trim())}`);
+        const json = await res.json();
+        const found = json.data?.find((p: Product) => p.name.toLowerCase() === requestForm.name.trim().toLowerCase());
+        setExistingProductMatch(found || null);
+      } catch {
+        setExistingProductMatch(null);
+      }
+    }, 400);
+    return () => clearTimeout(delayDebounce);
+  }, [requestForm.name]);
+
   const searchRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -126,14 +147,82 @@ export default function OrderBuilder() {
     searchTimeoutRef.current = setTimeout(() => loadProducts(value), 300);
   }
 
+  function getProductUnits(product: Product) {
+    const list = [{ id: product.baseUnitId, code: product.baseUnit.code, conversionFactor: 1 }];
+    if (product.unitConversions) {
+      product.unitConversions.forEach((uc) => {
+        list.push({
+          id: uc.unitId,
+          code: uc.unit.code,
+          conversionFactor: Number(uc.conversionToBase || uc.conversionFactor || 1)
+        });
+      });
+    }
+    return list;
+  }
+
   function getSellPrice(product: Product, unitId: string): number {
-    return product.sellingPrices?.[0]?.price || 0;
+    // Try to find price matching the specific unitId
+    const specificPrice = product.sellingPrices?.find((sp) => sp.unitId === unitId);
+    if (specificPrice) return Number(specificPrice.price);
+
+    // Fallback: get base unit price and multiply by conversion factor
+    const basePriceObj = product.sellingPrices?.find((sp) => sp.unitId === product.baseUnitId) || product.sellingPrices?.[0];
+    const basePrice = basePriceObj ? Number(basePriceObj.price) : 0;
+    
+    if (unitId === product.baseUnitId) return basePrice;
+
+    const conv = product.unitConversions?.find((c) => c.unitId === unitId);
+    const factor = conv ? Number(conv.conversionToBase || conv.conversionFactor || 1) : 1;
+    return basePrice * factor;
   }
 
   function getConversionFactor(product: Product, unitId: string): number {
     if (unitId === product.baseUnitId) return 1;
     const conv = product.unitConversions?.find((c) => c.unitId === unitId);
-    return conv?.conversionFactor || 1;
+    return Number(conv?.conversionToBase || conv?.conversionFactor || 1);
+  }
+
+  async function updateUnit(cartItemId: string, newUnitId: string) {
+    let itemToUpdate = cart.find((i) => i.id === cartItemId);
+    if (!itemToUpdate) return;
+
+    const product = itemToUpdate.product;
+    const allUnits = getProductUnits(product);
+    const selectedUnit = allUnits.find((u) => u.id === newUnitId);
+    if (!selectedUnit) return;
+
+    const conversionFactor = selectedUnit.conversionFactor;
+    const unitSellPrice = getSellPrice(product, newUnitId);
+
+    let priceCeiling: number | null = null;
+    let priceCeilingExceeded = false;
+    if (orderType === "B2B_GROSIR" && selectedInstitutionId) {
+      try {
+        const res = await fetch(`/api/institutions/${selectedInstitutionId}/price-ceiling?productId=${product.id}&unitId=${newUnitId}`);
+        const json = await res.json();
+        if (json.data) {
+          priceCeiling = json.data.priceCeiling;
+          priceCeilingExceeded = priceCeiling !== null && unitSellPrice > priceCeiling;
+        }
+      } catch {}
+    }
+
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id !== cartItemId) return item;
+        return {
+          ...item,
+          unitId: newUnitId,
+          unit: { id: newUnitId, code: selectedUnit.code, name: selectedUnit.code },
+          conversionFactor,
+          unitSellPrice,
+          subtotal: item.qty * unitSellPrice,
+          priceCeiling,
+          priceCeilingExceeded,
+        };
+      })
+    );
   }
 
   async function addToCart(product: Product) {
@@ -564,6 +653,27 @@ export default function OrderBuilder() {
                   onChange={(e) => setRequestForm({ ...requestForm, name: e.target.value })}
                   className="w-full rounded border px-3 py-1.5 text-sm"
                 />
+                {existingProductMatch && (
+                  <div className="mt-1.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                    <p className="font-bold flex items-center gap-1">
+                      <span>⚠️</span> Produk sudah terdaftar di database!
+                    </p>
+                    <p className="text-[10px] text-amber-700 leading-relaxed">
+                      Produk <strong className="font-bold">{existingProductMatch.name} ({existingProductMatch.sku})</strong> sudah ada. Gunakan pencarian di atas atau klik tombol di bawah untuk langsung menambahkan produk resmi ini.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        addToCart(existingProductMatch);
+                        setRequestForm({ name: "", qty: "", unit: "", notes: "" });
+                        setExistingProductMatch(null);
+                      }}
+                      className="mt-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-extrabold text-[10px] uppercase tracking-wider transition-colors inline-block"
+                    >
+                      Masukkan Keranjang Resmi
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Jumlah</label>
@@ -705,6 +815,17 @@ export default function OrderBuilder() {
                   >
                     <Plus className="h-3 w-3" />
                   </button>
+                  <select
+                    value={item.unitId}
+                    onChange={(e) => updateUnit(item.id, e.target.value)}
+                    className="ml-1 rounded border border-gray-300 px-2 py-0.5 text-xs font-semibold text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary h-[26px]"
+                  >
+                    {getProductUnits(item.product).map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className={cn(

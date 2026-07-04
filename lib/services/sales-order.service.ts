@@ -9,7 +9,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { Decimal } from "decimal.js";
-import { toDecimal, addDecimal, multiplyDecimal } from "@/lib/utils/decimal";
+import { toDecimal, addDecimal, multiplyDecimal, divideDecimal } from "@/lib/utils/decimal";
 import { generateDocumentNumber } from "@/lib/utils/document-numbering";
 import { allocateStock, createSourcingRequestForShortage } from "./inventory.service";
 import { validatePriceCeiling } from "./sales-order-calculations";
@@ -205,6 +205,28 @@ export async function createSalesOrder(
       const itemSubtotal = multiplyDecimal(item.qty, item.unitSellPrice);
       subtotal = addDecimal(subtotal, itemSubtotal);
 
+      // Resolve conversion factor
+      let conversionFactor = item.baseUnitConversion || 1;
+      const product = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { baseUnitId: true }
+      });
+      if (product && product.baseUnitId !== item.unitId) {
+        const conv = await tx.productUnitConversion.findUnique({
+          where: {
+            productId_unitId: {
+              productId: item.productId,
+              unitId: item.unitId,
+            },
+          },
+        });
+        if (conv) {
+          conversionFactor = Number(conv.conversionToBase);
+        }
+      }
+
+      const qtyNeededBase = multiplyDecimal(item.qty, conversionFactor);
+
       // Create sales order item
       const orderItem = await tx.salesOrderItem.create({
         data: {
@@ -221,14 +243,71 @@ export async function createSalesOrder(
         },
       });
 
-      // Allocate stock
-      const allocationResult = await allocateStock({
-        productId: item.productId,
-        qtyNeeded: item.qty,
-        salesOrderItemId: orderItem.id,
-        actorId: createdById,
-        baseUnitConversion: item.baseUnitConversion,
-      }, tx);
+      let allocationResult;
+
+      if (orderType === "B2B_GROSIR") {
+        // Calculate virtual booking
+        // a. Get physical stock
+        const batches = await tx.stockBatch.findMany({
+          where: { productId: item.productId, qtyRemainingBase: { gt: 0 } },
+          select: { qtyRemainingBase: true },
+        });
+        const physical = batches.reduce((sum, b) => sum.add(toDecimal(b.qtyRemainingBase)), toDecimal(0));
+
+        // b. Get active B2B bookings (status not SELESAI or DIBATALKAN, excluding the current order)
+        const activeB2BItems = await tx.salesOrderItem.findMany({
+          where: {
+            productId: item.productId,
+            salesOrder: {
+              orderType: "B2B_GROSIR",
+              status: { notIn: ["SELESAI", "DIBATALKAN"] },
+              id: { not: newOrder.id }
+            }
+          },
+          include: { product: { select: { baseUnitId: true } } }
+        });
+
+        let booked = toDecimal(0);
+        for (const activeItem of activeB2BItems) {
+          let factor = 1;
+          if (activeItem.unitId !== activeItem.product.baseUnitId) {
+            const conv = await tx.productUnitConversion.findUnique({
+              where: {
+                productId_unitId: {
+                  productId: activeItem.productId,
+                  unitId: activeItem.unitId,
+                },
+              },
+            });
+            if (conv) {
+              factor = Number(conv.conversionToBase);
+            }
+          }
+          booked = booked.add(multiplyDecimal(activeItem.qty, factor));
+        }
+
+        const unbooked = Decimal.max(0, physical.minus(booked));
+        const coveredBase = Decimal.min(qtyNeededBase, unbooked);
+        const shortageBase = qtyNeededBase.minus(coveredBase);
+        const shortageOrderUnit = divideDecimal(shortageBase, conversionFactor);
+
+        allocationResult = {
+          allocated: shortageBase.lte(0),
+          totalCost: toDecimal(0),
+          unitCostPrice: toDecimal(0),
+          needsSourcing: shortageBase.gt(0),
+          remainingQty: shortageOrderUnit,
+        };
+      } else {
+        // Allocate stock for B2C
+        allocationResult = await allocateStock({
+          productId: item.productId,
+          qtyNeeded: item.qty,
+          salesOrderItemId: orderItem.id,
+          actorId: createdById,
+          baseUnitConversion: conversionFactor,
+        }, tx);
+      }
 
       // Update order item dengan cost info
       const marginAmount = multiplyDecimal(item.qty, item.unitSellPrice).minus(
@@ -252,7 +331,7 @@ export async function createSalesOrder(
         allItemsAvailable = false;
 
         // Create sourcing request
-        const deadline = requestedDeadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const deadline = sourcingDeadline || requestedDeadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await createSourcingRequestForShortage(
           orderItem.id,
           item.productId,
@@ -267,6 +346,9 @@ export async function createSalesOrder(
     // 3. Update order totals
     const totalAmount = subtotal; // bisa dikurangi discount jika ada
     const totalMargin = subtotal.minus(totalCost);
+    const resolvedStatus = (orderType === "B2B_GROSIR" || allItemsAvailable)
+      ? OrderStatus.MENUNGGU_KONFIRMASI
+      : OrderStatus.DRAFT;
 
     await tx.salesOrder.update({
       where: { id: newOrder.id },
@@ -275,7 +357,7 @@ export async function createSalesOrder(
         totalAmount: totalAmount.toNumber(),
         totalCostAmount: totalCost.toNumber(),
         totalMarginAmount: totalMargin.toNumber(),
-        status: allItemsAvailable ? OrderStatus.MENUNGGU_KONFIRMASI : OrderStatus.DRAFT,
+        status: resolvedStatus,
       },
     });
 
@@ -284,9 +366,11 @@ export async function createSalesOrder(
       data: {
         salesOrderId: newOrder.id,
         fromStatus: null,
-        toStatus: allItemsAvailable ? OrderStatus.MENUNGGU_KONFIRMASI : OrderStatus.DRAFT,
+        toStatus: resolvedStatus,
         changedById: createdById,
         note: "Order created",
+        customerNote: orderType === "B2B_GROSIR" ? "Pesanan Anda sedang ditinjau oleh admin" : undefined,
+        isVisibleToCustomer: orderType === "B2B_GROSIR",
       },
     });
 
@@ -358,7 +442,119 @@ export async function updateOrderStatus(
     );
   }
 
+  // Pre-validate stock for B2B orders before marking as completed
+  if (newStatus === OrderStatus.SELESAI && order.orderType === OrderType.B2B_GROSIR) {
+    const items = await prisma.salesOrderItem.findMany({
+      where: { salesOrderId: orderId },
+      include: { product: true }
+    });
+
+    for (const item of items) {
+      let conversionFactor = 1;
+      if (item.unitId !== item.product.baseUnitId) {
+        const conv = await prisma.productUnitConversion.findUnique({
+          where: {
+            productId_unitId: {
+              productId: item.productId,
+              unitId: item.unitId,
+            },
+          },
+        });
+        if (conv) {
+          conversionFactor = Number(conv.conversionToBase);
+        }
+      }
+
+      const qtyNeededBase = multiplyDecimal(item.qty, conversionFactor);
+
+      const batches = await prisma.stockBatch.findMany({
+        where: { productId: item.productId, qtyRemainingBase: { gt: 0 } },
+        select: { qtyRemainingBase: true },
+      });
+      const physical = batches.reduce((sum, b) => sum.add(toDecimal(b.qtyRemainingBase)), toDecimal(0));
+
+      if (physical.lt(qtyNeededBase)) {
+        throw new Error(
+          `Stok fisik produk '${item.product.name}' tidak mencukupi untuk menyelesaikan pesanan B2B. Kebutuhan: ${qtyNeededBase.toString()} unit base, Tersedia: ${physical.toString()} unit base. Silakan lakukan pengadaan barang terlebih dahulu.`
+        );
+      }
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
+    // If B2B order is transitioning to SELESAI, deduct stock physically
+    if (newStatus === OrderStatus.SELESAI && order.orderType === OrderType.B2B_GROSIR) {
+      const items = await tx.salesOrderItem.findMany({
+        where: { salesOrderId: orderId },
+        include: { product: true }
+      });
+
+      let totalCost = toDecimal(0);
+
+      for (const item of items) {
+        let conversionFactor = 1;
+        if (item.unitId !== item.product.baseUnitId) {
+          const conv = await tx.productUnitConversion.findUnique({
+            where: {
+              productId_unitId: {
+                productId: item.productId,
+                unitId: item.unitId,
+              },
+            },
+          });
+          if (conv) {
+            conversionFactor = Number(conv.conversionToBase);
+          }
+        }
+
+        const allocationResult = await allocateStock({
+          productId: item.productId,
+          qtyNeeded: item.qty,
+          salesOrderItemId: item.id,
+          actorId: changedById,
+          baseUnitConversion: conversionFactor,
+        }, tx);
+
+        if (allocationResult.needsSourcing) {
+          throw new Error(
+            `Gagal memotong stok produk '${item.product.name}'. Stok tidak mencukupi.`
+          );
+        }
+
+        const marginAmount = multiplyDecimal(item.qty, item.unitSellPrice).minus(
+          allocationResult.totalCost
+        );
+
+        await tx.salesOrderItem.update({
+          where: { id: item.id },
+          data: {
+            unitCostPrice: allocationResult.unitCostPrice.toNumber(),
+            subtotalCost: allocationResult.totalCost.toNumber(),
+            marginAmount: marginAmount.toNumber(),
+            isAvailableFromStock: true,
+          },
+        });
+
+        totalCost = addDecimal(totalCost, allocationResult.totalCost);
+      }
+
+      // Update total cost and margin on order
+      const currentOrder = await tx.salesOrder.findUniqueOrThrow({
+        where: { id: orderId },
+        select: { subtotal: true }
+      });
+      const subtotal = toDecimal(currentOrder.subtotal);
+      const totalMargin = subtotal.minus(totalCost);
+
+      await tx.salesOrder.update({
+        where: { id: orderId },
+        data: {
+          totalCostAmount: totalCost.toNumber(),
+          totalMarginAmount: totalMargin.toNumber(),
+        }
+      });
+    }
+
     // Update order status
     await tx.salesOrder.update({
       where: { id: orderId },

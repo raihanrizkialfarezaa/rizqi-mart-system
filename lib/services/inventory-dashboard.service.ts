@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { toDecimal, addDecimal } from "@/lib/utils/decimal";
+import { toDecimal, addDecimal, multiplyDecimal } from "@/lib/utils/decimal";
+import { Decimal } from "decimal.js";
 
 /**
  * Inventory Dashboard Service
@@ -13,6 +14,8 @@ export type ProductStockRow = {
   categoryName: string;
   baseUnitCode: string;
   totalStock: string;
+  bookedStock: string;
+  b2cStock: string;
   minStockAlert: string;
   isLow: boolean;
   batchCount: number;
@@ -20,6 +23,41 @@ export type ProductStockRow = {
 };
 
 export async function getProductStockLevels(): Promise<ProductStockRow[]> {
+  const activeB2BItems = await prisma.salesOrderItem.findMany({
+    where: {
+      salesOrder: {
+        orderType: "B2B_GROSIR",
+        status: { notIn: ["SELESAI", "DIBATALKAN"] },
+      },
+    },
+    include: {
+      product: { select: { baseUnitId: true } },
+    },
+  });
+
+  const bookedStockMap: Record<string, Decimal> = {};
+  for (const item of activeB2BItems) {
+    let factor = 1;
+    if (item.unitId !== item.product.baseUnitId) {
+      const conv = await prisma.productUnitConversion.findUnique({
+        where: {
+          productId_unitId: {
+            productId: item.productId,
+            unitId: item.unitId,
+          },
+        },
+      });
+      if (conv) {
+        factor = Number(conv.conversionToBase);
+      }
+    }
+    const qtyBase = toDecimal(item.qty).times(factor);
+    if (!bookedStockMap[item.productId]) {
+      bookedStockMap[item.productId] = toDecimal(0);
+    }
+    bookedStockMap[item.productId] = bookedStockMap[item.productId].add(qtyBase);
+  }
+
   const products = await prisma.product.findMany({
     where: { isActive: true },
     include: {
@@ -43,6 +81,9 @@ export async function getProductStockLevels(): Promise<ProductStockRow[]> {
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime());
 
+    const booked = bookedStockMap[p.id] || toDecimal(0);
+    const b2cStock = Decimal.max(0, total.minus(booked));
+
     return {
       id: p.id,
       sku: p.sku,
@@ -50,8 +91,10 @@ export async function getProductStockLevels(): Promise<ProductStockRow[]> {
       categoryName: p.category.name,
       baseUnitCode: p.baseUnit.code,
       totalStock: total.toString(),
+      bookedStock: booked.toString(),
+      b2cStock: b2cStock.toString(),
       minStockAlert: p.minStockAlert.toString(),
-      isLow: total.lte(toDecimal(p.minStockAlert)),
+      isLow: b2cStock.lte(toDecimal(p.minStockAlert)), // low if eceran is below alert!
       batchCount: p.stockBatches.length,
       nearestExpiry: expiries[0] ?? null,
     };
