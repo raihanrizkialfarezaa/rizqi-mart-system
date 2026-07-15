@@ -17,6 +17,20 @@ import ProductShowcase from "@/components/ecommerce/ProductShowcase";
 import FaqSection from "@/components/ecommerce/FaqSection";
 import type { SerializedProduct } from "@/components/ecommerce/ProductShowcase";
 
+export type HighlightProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  categoryName: string;
+  retailPrice: number;
+  retailUnit: string;
+  institusiPrice: number;
+  institusiUnit: string;
+  totalStock: number;
+  baseUnitCode: string;
+  firstBatchExpiry: string | null;
+};
+
 async function getFeaturedProducts(): Promise<SerializedProduct[]> {
   const rows = await prisma.product.findMany({
     where: { isActive: true },
@@ -49,6 +63,54 @@ async function getFeaturedProducts(): Promise<SerializedProduct[]> {
       isActive: sp.isActive,
     })),
   }));
+}
+
+async function getHighlightProduct(): Promise<HighlightProduct | null> {
+  const highlight = await prisma.product.findFirst({
+    where: { isActive: true },
+    include: {
+      category: true,
+      baseUnit: true,
+      sellingPrices: {
+        where: { isActive: true },
+        include: { unit: true },
+        orderBy: { effectiveFrom: "desc" },
+      },
+      stockBatches: {
+        where: { qtyRemainingBase: { gt: 0 } },
+        orderBy: { expiryDate: "asc" },
+      },
+    },
+  });
+
+  if (!highlight) return null;
+
+  const retailPriceObj = highlight.sellingPrices.find((sp) => sp.customerType === "RETAIL");
+  const institusiPriceObj = highlight.sellingPrices.find((sp) => sp.customerType === "INSTITUSI");
+
+  const totalStock = highlight.stockBatches.reduce(
+    (sum, batch) => sum + Number(batch.qtyRemainingBase),
+    0
+  );
+
+  const firstBatchExpiryDate = highlight.stockBatches[0]?.expiryDate;
+  const firstBatchExpiry = firstBatchExpiryDate
+    ? new Date(firstBatchExpiryDate).toLocaleDateString("id-ID", { month: "2-digit", year: "numeric" })
+    : null;
+
+  return {
+    id: highlight.id,
+    name: highlight.name,
+    sku: highlight.sku,
+    categoryName: highlight.category.name,
+    retailPrice: retailPriceObj ? Number(retailPriceObj.price) : 0,
+    retailUnit: retailPriceObj?.unit?.code || "pcs",
+    institusiPrice: institusiPriceObj ? Number(institusiPriceObj.price) : 0,
+    institusiUnit: institusiPriceObj?.unit?.code || "pcs",
+    totalStock,
+    baseUnitCode: highlight.baseUnit?.code || "pcs",
+    firstBatchExpiry,
+  };
 }
 
 async function getCategories() {
@@ -118,15 +180,16 @@ const TESTIMONIALS = [
 ];
 
 export default async function HomePage() {
-  const [products, categories] = await Promise.all([
+  const [products, categories, highlightProduct] = await Promise.all([
     getFeaturedProducts(),
     getCategories(),
+    getHighlightProduct(),
   ]);
 
   return (
     <div className="bg-white">
       {/* ───── Hero ───── */}
-      <HomepageHero />
+      <HomepageHero highlightProduct={highlightProduct} />
 
       {/* ───── Feature strips ───── */}
       <section className="border-b border-slate-100 bg-slate-50 py-12">

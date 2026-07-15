@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import ProductCard from "@/components/ecommerce/ProductCard";
-import { Package } from "lucide-react";
+import { Package, Inbox, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 type SearchParams = {
   category?: string;
@@ -58,7 +59,26 @@ async function getProducts(searchParams: SearchParams) {
     },
   });
 
-  return products;
+  // Convert Decimals to number to prevent Next.js client component boundary warnings
+  return products.map((product) => {
+    const totalStock = product.stockBatches.reduce(
+      (sum, batch) => sum + Number(batch.qtyRemainingBase),
+      0
+    );
+    const price = product.sellingPrices[0]
+      ? Number(product.sellingPrices[0].price)
+      : 0;
+
+    return {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      price,
+      imageUrl: product.imageUrl || null,
+      categoryName: product.category.name,
+      isAvailable: totalStock > 0,
+    };
+  });
 }
 
 async function getCategories() {
@@ -89,102 +109,115 @@ export default async function ProductsPage({
   const selectedCategory = searchParams.category || "all";
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-slate-50/50">
+      <div className="page-container py-12 md:py-16">
+        
+        {/* Breadcrumb / Back button */}
+        <div className="mb-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Kembali ke Beranda
+          </Link>
+        </div>
+
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Katalog Produk</h1>
-          <p className="mt-2 text-gray-600">
-            Temukan produk sembako berkualitas dengan harga terbaik
+        <div className="mb-10">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Katalog Produk</h1>
+          <p className="mt-2 text-[14px] text-slate-500">
+            Temukan produk sembako berkualitas dengan harga terbaik untuk kebutuhan harian & grosir.
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="mb-8 rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="mb-4 font-semibold">Kategori</h2>
+        {/* Filters Panel */}
+        <div className="mb-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
+            Kategori
+          </h2>
           <div className="flex flex-wrap gap-2">
-            <a
+            <Link
               href="/products"
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-lg px-4 py-2 text-[12px] font-medium transition-all ${
                 selectedCategory === "all"
-                  ? "bg-primary text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
               }`}
             >
               Semua Produk
-            </a>
-            {categories.map((category) => (
-              <a
-                key={category.id}
-                href={`/products?category=${encodeURIComponent(category.name)}`}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  selectedCategory.toLowerCase() === category.name.toLowerCase()
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {category.name}
-              </a>
-            ))}
+            </Link>
+            {categories.map((category) => {
+              const isSelected =
+                selectedCategory.toLowerCase() === category.name.toLowerCase();
+              return (
+                <Link
+                  key={category.id}
+                  href={`/products?category=${encodeURIComponent(category.name)}`}
+                  className={`rounded-lg px-4 py-2 text-[12px] font-medium transition-all ${
+                    isSelected
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  {category.name}
+                </Link>
+              );
+            })}
           </div>
         </div>
 
-        {/* Search Info */}
+        {/* Search Query Notification */}
         {searchParams.search && (
-          <div className="mb-6 rounded-lg bg-blue-50 p-4">
-            <p className="text-sm text-blue-900">
-              Hasil pencarian untuk:{" "}
-              <span className="font-semibold">{searchParams.search}</span>
+          <div className="mb-8 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm flex items-center justify-between">
+            <p className="text-[13px] text-slate-600">
+              Menampilkan hasil pencarian untuk:{" "}
+              <span className="font-semibold text-slate-900">"{searchParams.search}"</span>
             </p>
+            <Link href="/products" className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 underline underline-offset-4">
+              Hapus Pencarian
+            </Link>
           </div>
         )}
 
         {/* Products Grid */}
         {products.length > 0 ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {products.map((product) => {
-              const totalStock = product.stockBatches.reduce(
-                (sum, batch) => sum + Number(batch.qtyRemainingBase),
-                0
-              );
-              const isAvailable = totalStock > 0;
-
-              return (
+          <div>
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {products.map((product) => (
                 <ProductCard
                   key={product.id}
                   id={product.id}
                   name={product.name}
                   sku={product.sku}
-                  price={product.sellingPrices[0]?.price || 0}
+                  price={product.price}
                   imageUrl={product.imageUrl || undefined}
-                  categoryName={product.category.name}
-                  isAvailable={isAvailable}
+                  categoryName={product.categoryName}
+                  isAvailable={product.isAvailable}
                 />
-              );
-            })}
+              ))}
+            </div>
+
+            {/* Product Count Footer */}
+            <div className="mt-12 text-center text-xs text-slate-400">
+              Menampilkan {products.length} produk pilihan
+            </div>
           </div>
         ) : (
-          <div className="rounded-lg bg-white p-12 text-center shadow-sm">
-            <Package className="mx-auto h-16 w-16 text-gray-400" />
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-16 text-center shadow-sm">
+            <Inbox className="mx-auto h-12 w-12 text-slate-300 stroke-[1.25]" />
+            <h3 className="mt-4 text-base font-semibold text-slate-900">
               Produk tidak ditemukan
             </h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Coba ubah filter atau kata kunci pencarian Anda
+            <p className="mt-2 text-xs text-slate-500">
+              Coba gunakan kata kunci lain atau pilih kategori yang berbeda
             </p>
-            <a
+            <Link
               href="/products"
-              className="mt-6 inline-block rounded-lg bg-primary px-6 py-2 text-sm font-medium text-white hover:bg-primary/90"
+              className="mt-6 inline-flex rounded-xl bg-slate-900 px-5 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-700"
             >
               Lihat Semua Produk
-            </a>
-          </div>
-        )}
-
-        {/* Product Count */}
-        {products.length > 0 && (
-          <div className="mt-8 text-center text-sm text-gray-600">
-            Menampilkan {products.length} produk
+            </Link>
           </div>
         )}
       </div>
