@@ -107,8 +107,9 @@ export default function ProductCard({
         )}
 
         {!isAvailable && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[2px]">
-            <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[2px]">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50/95 px-3.5 py-1.5 text-[11px] font-extrabold text-rose-700 shadow-md">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
               Stok Habis
             </span>
           </div>
@@ -118,14 +119,18 @@ export default function ProductCard({
       {/* Content */}
       <div className="flex flex-1 flex-col p-4">
         {/* Category */}
-        <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">
             {categoryName}
           </span>
           {/* Highlight Stock Badge */}
-          {isAvailable && stockCount !== undefined && (
-            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-100/50">
+          {isAvailable && stockCount !== undefined ? (
+            <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-extrabold text-emerald-800 border border-emerald-200 shadow-sm whitespace-nowrap">
               Stok: {stockCount}
+            </span>
+          ) : (
+            <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-extrabold text-rose-805 border border-rose-200 shadow-sm whitespace-nowrap">
+              Habis
             </span>
           )}
         </div>
