@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -87,14 +87,28 @@ const navItems: NavItem[] = [
   { label: "AI Assistant", href: "/erp/ai-assistant", icon: BrainCircuit },
 ];
 
-function getIsActive(pathname: string, href: string): boolean {
-  if (href === "/erp") {
+function splitHref(href: string) {
+  const [path, hash = ""] = href.split("#");
+  return { path, hash: hash ? `#${hash}` : "" };
+}
+
+function getIsActive(pathname: string, href: string, activeHash: string = ""): boolean {
+  const { path, hash } = splitHref(href);
+  if (hash) {
+    return pathname === path && activeHash === hash;
+  }
+
+  if (path === "/erp/finance") {
+    return pathname === path && activeHash === "";
+  }
+
+  if (path === "/erp") {
     return pathname === "/erp";
   }
-  if (pathname === href) {
+  if (pathname === path) {
     return true;
   }
-  if (pathname.startsWith(href)) {
+  if (pathname.startsWith(path)) {
     // Check if there is a more specific menu matching the current pathname
     const isMoreSpecificMatch = navGroups
       .flatMap((g) => g.children)
@@ -102,8 +116,8 @@ function getIsActive(pathname: string, href: string): boolean {
       .some(
         (item) =>
           item.href !== href &&
-          item.href.startsWith(href) &&
-          pathname.startsWith(item.href)
+          splitHref(item.href).path.startsWith(path) &&
+          pathname.startsWith(splitHref(item.href).path)
       );
     return !isMoreSpecificMatch;
   }
@@ -112,6 +126,7 @@ function getIsActive(pathname: string, href: string): boolean {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [activeHash, setActiveHash] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
     const set = new Set<string>();
     for (const g of navGroups) {
@@ -122,6 +137,25 @@ export default function Sidebar() {
     return set;
   });
 
+  useEffect(() => {
+    const updateHash = () => setActiveHash(window.location.hash);
+    updateHash();
+    window.addEventListener("hashchange", updateHash);
+    return () => window.removeEventListener("hashchange", updateHash);
+  }, []);
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      for (const group of navGroups) {
+        if (group.children.some((child) => getIsActive(pathname, child.href, activeHash))) {
+          next.add(group.label);
+        }
+      }
+      return next;
+    });
+  }, [activeHash, pathname]);
+
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -131,7 +165,7 @@ export default function Sidebar() {
     });
   };
 
-  const isActive = (href: string) => getIsActive(pathname, href);
+  const isActive = (href: string) => getIsActive(pathname, href, activeHash);
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r bg-white lg:flex">
@@ -192,6 +226,7 @@ export default function Sidebar() {
                         <Link
                           key={child.href}
                           href={child.href}
+                          onClick={() => setActiveHash(splitHref(child.href).hash)}
                           className={cn(
                             "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                             childActive
