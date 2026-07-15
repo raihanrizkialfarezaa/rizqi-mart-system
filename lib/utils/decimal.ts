@@ -10,7 +10,7 @@ export function toDecimal(value: string | number | Decimal): Decimal {
 }
 
 export function addDecimal(...values: (string | number | Decimal)[]): Decimal {
-  return values.reduce(
+  return values.reduce<Decimal>(
     (sum, val) => sum.add(toDecimal(val)),
     new Decimal(0)
   );

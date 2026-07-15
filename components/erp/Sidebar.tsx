@@ -11,10 +11,10 @@ import {
   Wallet,
   BrainCircuit,
   Store,
-  ChevronRight,
   ChevronDown,
   List,
   Plus,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -53,12 +53,37 @@ const navGroups: NavGroup[] = [
       { label: "Purchase Order (PO)", href: "/erp/procurement/purchase-orders", icon: List },
     ],
   },
+  {
+    label: "Inventori",
+    icon: Boxes,
+    children: [
+      { label: "Stok Produk", href: "/erp/inventory", icon: List },
+      { label: "Batch Kadaluarsa", href: "/erp/inventory/batches", icon: List },
+      { label: "Pergerakan Stok", href: "/erp/inventory/movements", icon: List },
+    ],
+  },
+  {
+    label: "Pelanggan B2B",
+    icon: Users,
+    children: [
+      { label: "Identitas Dapur", href: "/erp/customers/identities", icon: List },
+      { label: "Permintaan Produk", href: "/erp/product-requests", icon: List },
+    ],
+  },
+  {
+    label: "Keuangan",
+    icon: Wallet,
+    children: [
+      { label: "Ringkasan", href: "/erp/finance", icon: List },
+      { label: "Piutang", href: "/erp/finance#receivables", icon: List },
+      { label: "Validasi & Pencairan", href: "/erp/finance#actions", icon: List },
+      { label: "Hutang Supplier", href: "/erp/finance#payables", icon: List },
+    ],
+  },
 ];
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/erp", icon: LayoutDashboard },
-  { label: "Inventori", href: "/erp/inventory", icon: Boxes },
-  { label: "Keuangan", href: "/erp/finance", icon: Wallet },
   { label: "AI Assistant", href: "/erp/ai-assistant", icon: BrainCircuit },
 ];
 
@@ -199,24 +224,19 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 active
                   ? "bg-primary text-white shadow-sm shadow-primary/20"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               )}
             >
-              <span className="flex items-center gap-3">
-                <item.icon
-                  className={cn(
-                    "h-5 w-5 transition-transform duration-200 group-hover:scale-110",
-                    active ? "text-white" : "text-gray-400 group-hover:text-gray-600"
-                  )}
-                />
-                {item.label}
-              </span>
-              {active && (
-                <ChevronRight className="h-4 w-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
-              )}
+              <item.icon
+                className={cn(
+                  "h-5 w-5 transition-transform duration-200 group-hover:scale-110",
+                  active ? "text-white" : "text-gray-400 group-hover:text-gray-600"
+                )}
+              />
+              {item.label}
             </Link>
           );
         })}
