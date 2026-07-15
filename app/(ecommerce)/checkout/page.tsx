@@ -5,27 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag } from "lucide-react";
 import CheckoutForm, { CheckoutFormData } from "@/components/ecommerce/CheckoutForm";
-
-// Mock cart items - in production, this would come from Context/Redux/Database
-const mockCartItems = [
-  {
-    id: "1",
-    name: "Susu UHT Full Cream Cimory 125ml",
-    price: 124000,
-    quantity: 2,
-    unitName: "Karton",
-  },
-];
+import { useCart } from "@/components/ecommerce/CartContext";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
-
-  const cartItems = mockCartItems;
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const { cartItems, subtotal, clearCart } = useCart();
   const shippingCost = 0; // Free shipping
   const total = subtotal + shippingCost;
 
@@ -38,6 +23,9 @@ export default function CheckoutPage() {
 
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Clear local cart
+      clearCart();
 
       // Redirect to success page
       router.push("/orders?status=success");

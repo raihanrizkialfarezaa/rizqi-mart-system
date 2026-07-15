@@ -55,5 +55,22 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
+  }
+}
+
+@layer utilities {
+  /* Consistent section padding */
+  .section-pad {
+    @apply py-16 md:py-24;
+  }
+  /* Page max-width container with generous horizontal padding */
+  .page-container {
+    @apply mx-auto w-full max-w-7xl px-6 sm:px-8 md:px-12 lg:px-16;
   }
 }

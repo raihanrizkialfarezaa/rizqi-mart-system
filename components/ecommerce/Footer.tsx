@@ -1,98 +1,118 @@
 import Link from "next/link";
-import { Facebook, Instagram, MapPin, Phone, Mail } from "lucide-react";
+import { MapPin, Phone, Mail, Instagram } from "lucide-react";
 
 export default function Footer() {
+  const year = new Date().getFullYear();
+
   return (
-    <footer className="border-t bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="page-container py-14">
+        <div className="grid grid-cols-2 gap-10 md:grid-cols-4">
           {/* Brand */}
-          <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white font-bold">
+          <div className="col-span-2 md:col-span-1">
+            <Link href="/" className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white">
                 R
               </div>
-              <span className="text-lg font-bold">Rizqi Mart</span>
-            </div>
-            <p className="text-sm text-gray-600">
-              Toko sembako terpercaya di Mojokerto. Melayani pembelian ecer dan grosir.
+              <span className="text-[15px] font-semibold text-slate-900 tracking-tight">
+                Rizqi Mart
+              </span>
+            </Link>
+            <p className="mt-4 text-[13px] leading-relaxed text-slate-500">
+              Distributor sembako terpercaya di Mojokerto. Melayani retail harian
+              dan pengadaan grosir untuk mitra usaha.
             </p>
+            <div className="mt-5 flex items-center gap-3">
+              <a
+                href="#"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900"
+                aria-label="Instagram"
+              >
+                <Instagram className="h-4 w-4" />
+              </a>
+            </div>
           </div>
 
-          {/* Links */}
+          {/* Produk */}
           <div>
-            <h3 className="font-semibold mb-4">Produk</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link href="/products?category=susu" className="text-gray-600 hover:text-primary">
-                  Susu & Olahan
-                </Link>
-              </li>
-              <li>
-                <Link href="/products?category=sembako" className="text-gray-600 hover:text-primary">
-                  Sembako Pokok
-                </Link>
-              </li>
-              <li>
-                <Link href="/products?category=minyak" className="text-gray-600 hover:text-primary">
-                  Minyak & Bumbu
-                </Link>
-              </li>
+            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Produk
+            </h3>
+            <ul className="space-y-3">
+              {[
+                { label: "Sembako Pokok", q: "sembako" },
+                { label: "Minyak & Bumbu", q: "minyak" },
+                { label: "Susu & Olahan", q: "susu" },
+                { label: "Minuman", q: "minuman" },
+              ].map((item) => (
+                <li key={item.q}>
+                  <Link
+                    href={`/products?category=${item.q}`}
+                    className="text-[13px] text-slate-600 transition-colors hover:text-slate-900"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Info */}
+          {/* Informasi */}
           <div>
-            <h3 className="font-semibold mb-4">Informasi</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link href="/about" className="text-gray-600 hover:text-primary">
-                  Tentang Kami
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms" className="text-gray-600 hover:text-primary">
-                  Syarat & Ketentuan
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy" className="text-gray-600 hover:text-primary">
-                  Kebijakan Privasi
-                </Link>
-              </li>
+            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Informasi
+            </h3>
+            <ul className="space-y-3">
+              {[
+                { label: "Tentang Kami", href: "/about" },
+                { label: "Syarat & Ketentuan", href: "/terms" },
+                { label: "Kebijakan Privasi", href: "/privacy" },
+                { label: "Hubungi Kami", href: "tel:081234567890" },
+              ].map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-[13px] text-slate-600 transition-colors hover:text-slate-900"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Contact */}
+          {/* Kontak */}
           <div>
-            <h3 className="font-semibold mb-4">Hubungi Kami</h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-start space-x-2">
-                <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Kontak
+            </h3>
+            <ul className="space-y-3">
+              <li className="flex items-start gap-2.5 text-[13px] text-slate-600">
+                <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-400" strokeWidth={1.75} />
                 <span>Mojokerto, Jawa Timur</span>
               </li>
-              <li className="flex items-start space-x-2">
-                <Phone className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>0812-3456-7890</span>
+              <li className="flex items-center gap-2.5 text-[13px] text-slate-600">
+                <Phone className="h-4 w-4 flex-shrink-0 text-slate-400" strokeWidth={1.75} />
+                <a href="tel:081234567890" className="hover:text-slate-900 transition-colors">
+                  0812-3456-7890
+                </a>
               </li>
-              <li className="flex items-start space-x-2">
-                <Mail className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>info@rizqimart.com</span>
+              <li className="flex items-center gap-2.5 text-[13px] text-slate-600">
+                <Mail className="h-4 w-4 flex-shrink-0 text-slate-400" strokeWidth={1.75} />
+                <a href="mailto:info@rizqimart.com" className="hover:text-slate-900 transition-colors">
+                  info@rizqimart.com
+                </a>
               </li>
             </ul>
-            <div className="flex space-x-4 mt-4">
-              <a href="#" className="text-gray-600 hover:text-primary">
-                <Facebook className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-gray-600 hover:text-primary">
-                <Instagram className="h-5 w-5" />
-              </a>
-            </div>
           </div>
         </div>
+      </div>
 
-        <div className="mt-8 border-t pt-6 text-center text-sm text-gray-600">
-          <p>&copy; {new Date().getFullYear()} Rizqi Mart. All rights reserved.</p>
+      {/* Bottom bar */}
+      <div className="border-t border-slate-100 py-5">
+        <div className="page-container flex flex-col items-center justify-between gap-3 text-[12px] text-slate-400 sm:flex-row">
+          <span>© {year} Rizqi Mart. Hak cipta dilindungi.</span>
+          <span>Dibuat untuk pelayanan kebutuhan pokok masyarakat Mojokerto</span>
         </div>
       </div>
     </footer>

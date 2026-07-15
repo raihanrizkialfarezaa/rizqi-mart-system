@@ -15,7 +15,7 @@ async function getProducts(searchParams: SearchParams) {
   // Filter by category
   if (searchParams.category) {
     const category = await prisma.productCategory.findFirst({
-      where: { name: { contains: searchParams.category, mode: "insensitive" } },
+      where: { name: { contains: searchParams.category } },
     });
     if (category) {
       where.categoryId = category.id;
@@ -26,7 +26,6 @@ async function getProducts(searchParams: SearchParams) {
   if (searchParams.search) {
     where.name = {
       contains: searchParams.search,
-      mode: "insensitive",
     };
   }
 

@@ -1,54 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
-
-type CartItem = {
-  id: string;
-  productId: string;
-  name: string;
-  sku: string;
-  price: number;
-  quantity: number;
-  imageUrl?: string;
-  unitName: string;
-};
-
-// Mock cart data - in production, this would come from Context/Redux/Database
-const mockCartItems: CartItem[] = [
-  {
-    id: "1",
-    productId: "prod-1",
-    name: "Susu UHT Full Cream Cimory 125ml",
-    sku: "CIM-UHT-125",
-    price: 124000,
-    quantity: 2,
-    unitName: "Karton",
-  },
-];
+import { useCart } from "@/components/ecommerce/CartContext";
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState<CartItem[]>(mockCartItems);
-
-  const updateQuantity = (itemId: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
-    setCartItems((items) =>
-      items.map((item) =>
-        item.id === itemId ? { ...item, quantity: newQuantity } : item
-      )
-    );
-  };
+  const { cartItems, updateQuantity, removeFromCart, subtotal } = useCart();
 
   const removeItem = (itemId: string) => {
-    setCartItems((items) => items.filter((item) => item.id !== itemId));
+    removeFromCart(itemId);
   };
-
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("id-ID", {

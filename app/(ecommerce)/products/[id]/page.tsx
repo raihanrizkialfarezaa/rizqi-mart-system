@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShoppingCart, ArrowLeft, Package } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import ProductCard from "@/components/ecommerce/ProductCard";
+import AddToCartButton from "@/components/ecommerce/AddToCartButton";
 
 async function getProduct(id: string) {
   const product = await prisma.product.findUnique({
@@ -209,10 +210,17 @@ export default async function ProductDetailPage({
 
               {/* Add to Cart */}
               {isAvailable ? (
-                <button className="mt-6 flex w-full items-center justify-center space-x-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-colors hover:bg-primary/90">
-                  <ShoppingCart className="h-5 w-5" />
-                  <span>Tambah ke Keranjang</span>
-                </button>
+                <AddToCartButton
+                  product={{
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    price: primaryPrice?.price || 0,
+                    imageUrl: product.imageUrl || undefined,
+                    unitName: primaryPrice?.unit?.name || "Pcs",
+                  }}
+                  className="mt-6 flex w-full items-center justify-center space-x-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-all hover:bg-primary/90 active:scale-95 shadow-sm hover:shadow"
+                />
               ) : (
                 <button
                   disabled
