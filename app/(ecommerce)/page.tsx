@@ -42,6 +42,10 @@ async function getFeaturedProducts(): Promise<SerializedProduct[]> {
         take: 1,
       },
       baseUnit: true,
+      stockBatches: {
+        where: { qtyRemainingBase: { gt: 0 } },
+        select: { qtyRemainingBase: true },
+      },
     },
     take: 8,
     orderBy: { createdAt: "desc" },
@@ -49,20 +53,29 @@ async function getFeaturedProducts(): Promise<SerializedProduct[]> {
 
   // Serialize Prisma Decimal → number so the data is safe to pass
   // across the Server → Client boundary (no Decimal objects allowed).
-  return rows.map((p) => ({
-    id: p.id,
-    name: p.name,
-    sku: p.sku,
-    imageUrl: p.imageUrl ?? null,
-    isActive: p.isActive,
-    category: { id: p.category.id, name: p.category.name },
-    sellingPrices: p.sellingPrices.map((sp) => ({
-      id: sp.id,
-      price: Number(sp.price),
-      customerType: sp.customerType,
-      isActive: sp.isActive,
-    })),
-  }));
+  return rows.map((p) => {
+    const totalStock = p.stockBatches.reduce(
+      (sum, batch) => sum + Number(batch.qtyRemainingBase),
+      0
+    );
+
+    return {
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      imageUrl: p.imageUrl ?? null,
+      isActive: p.isActive,
+      category: { id: p.category.id, name: p.category.name },
+      sellingPrices: p.sellingPrices.map((sp) => ({
+        id: sp.id,
+        price: Number(sp.price),
+        customerType: sp.customerType,
+        isActive: sp.isActive,
+      })),
+      totalStock,
+      unitName: p.baseUnit.name,
+    };
+  });
 }
 
 async function getHighlightProduct(): Promise<HighlightProduct | null> {

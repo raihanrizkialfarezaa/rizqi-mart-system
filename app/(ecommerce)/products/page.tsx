@@ -77,6 +77,8 @@ async function getProducts(searchParams: SearchParams) {
       imageUrl: product.imageUrl || null,
       categoryName: product.category.name,
       isAvailable: totalStock > 0,
+      totalStock,
+      unitName: product.baseUnit.name,
     };
   });
 }
@@ -194,6 +196,8 @@ export default async function ProductsPage({
                   imageUrl={product.imageUrl || undefined}
                   categoryName={product.categoryName}
                   isAvailable={product.isAvailable}
+                  stockCount={product.totalStock}
+                  unitName={product.unitName}
                 />
               ))}
             </div>

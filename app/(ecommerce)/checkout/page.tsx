@@ -18,20 +18,30 @@ export default function CheckoutPage() {
     setIsProcessing(true);
 
     try {
-      // In production, this would call the API to create order
-      // await createSalesOrder({ ...formData, items: cartItems })
+      const res = await fetch("/api/ecommerce/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          items: cartItems,
+        }),
+      });
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Gagal membuat pesanan");
+      }
+
+      const resData = await res.json();
 
       // Clear local cart
       clearCart();
 
-      // Redirect to success page
-      router.push("/orders?status=success");
-    } catch (error) {
+      // Redirect to orders page with success status
+      router.push(`/orders?status=success&orderId=${resData.data.id}`);
+    } catch (error: any) {
       console.error("Checkout error:", error);
-      alert("Terjadi kesalahan. Silakan coba lagi.");
+      alert(error.message || "Terjadi kesalahan. Silakan coba lagi.");
     } finally {
       setIsProcessing(false);
     }

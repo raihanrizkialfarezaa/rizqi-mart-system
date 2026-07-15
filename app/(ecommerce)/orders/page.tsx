@@ -2,32 +2,11 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import Link from "next/link";
 import { Package, Clock, CheckCircle, XCircle } from "lucide-react";
-
-// Mock orders data - in production, fetch from database
-const mockOrders = [
-  {
-    id: "order-1",
-    orderNumber: "SO/VVS/2026/07/0001",
-    createdAt: new Date("2026-06-28"),
-    status: "SELESAI",
-    paymentStatus: "LUNAS",
-    totalAmount: 248000,
-    itemCount: 2,
-  },
-  {
-    id: "order-2",
-    orderNumber: "SO/VVS/2026/07/0002",
-    createdAt: new Date("2026-06-30"),
-    status: "DALAM_PENGIRIMAN",
-    paymentStatus: "LUNAS",
-    totalAmount: 450000,
-    itemCount: 3,
-  },
-];
+import { prisma } from "@/lib/prisma";
 
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
   DRAFT: { label: "Draft", color: "bg-gray-100 text-gray-800", icon: Clock },
-  MENUNGGU_KONFIRMASI: { label: "Menunggu Konfirmasi", color: "bg-yellow-100 text-yellow-800", icon: Clock },
+  MENUNGGU_KONFIRMASI: { label: "Menunggu Konfirmasi", color: "bg-yellow-100 text-yellow-850 bg-yellow-50 text-yellow-800", icon: Clock },
   DIKONFIRMASI: { label: "Dikonfirmasi", color: "bg-blue-100 text-blue-800", icon: CheckCircle },
   SIAP_KIRIM: { label: "Siap Kirim", color: "bg-purple-100 text-purple-800", icon: Package },
   DALAM_PENGIRIMAN: { label: "Dalam Pengiriman", color: "bg-indigo-100 text-indigo-800", icon: Package },
@@ -46,7 +25,32 @@ export default async function OrdersPage({
     redirect("/sign-in");
   }
 
-  const orders = mockOrders; // In production: fetch from database filtered by user
+  // Fetch e-commerce B2C sales orders from database
+  const dbOrders = await prisma.salesOrder.findMany({
+    where: {
+      channel: "ECOMMERCE",
+    },
+    include: {
+      items: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  // Map db records to page display data
+  const orders = dbOrders.map((order) => {
+    const itemCount = order.items.reduce((sum, item) => sum + Number(item.qty), 0);
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      createdAt: order.createdAt,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      totalAmount: Number(order.totalAmount),
+      itemCount,
+    };
+  });
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -65,16 +69,27 @@ export default async function OrdersPage({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4">
-        <h1 className="mb-8 text-3xl font-bold">Pesanan Saya</h1>
+    <div className="min-h-screen bg-slate-50/50 py-12">
+      <div className="page-container">
+        
+        {/* Breadcrumb */}
+        <div className="mb-8">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            Kembali ke Beranda
+          </Link>
+        </div>
+
+        <h1 className="mb-8 text-2xl font-bold tracking-tight text-slate-900">Pesanan Saya</h1>
 
         {searchParams.status === "success" && (
-          <div className="mb-6 rounded-lg bg-green-50 p-4 border border-green-200">
-            <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <p className="font-medium text-green-900">
-                Pesanan berhasil dibuat! Kami akan segera memprosesnya.
+          <div className="mb-8 rounded-xl bg-emerald-50 border border-emerald-200/60 p-4">
+            <div className="flex items-center space-x-2.5">
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
+              <p className="text-xs font-semibold text-emerald-900">
+                Pesanan berhasil dibuat! Kami sedang memproses alokasi stok untuk pengiriman.
               </p>
             </div>
           </div>
@@ -90,68 +105,57 @@ export default async function OrdersPage({
                 <Link
                   key={order.id}
                   href={`/orders/${order.id}`}
-                  className="block rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+                  className="block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-slate-350 hover:shadow"
                 >
                   <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
                     {/* Order Info */}
                     <div className="flex-1">
                       <div className="flex items-center space-x-3">
-                        <Package className="h-5 w-5 text-gray-400" />
+                        <Package className="h-5 w-5 text-slate-400" />
                         <div>
-                          <div className="font-semibold text-gray-900">
+                          <div className="font-semibold text-slate-805 text-slate-850 text-slate-900">
                             {order.orderNumber}
                           </div>
-                          <div className="text-sm text-gray-600">
-                            {formatDate(order.createdAt)} • {order.itemCount} produk
+                          <div className="text-xs text-slate-500 mt-1">
+                            {formatDate(order.createdAt)} • {order.itemCount} unit produk
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Status */}
-                    <div className="flex items-center space-x-4">
+                    {/* Status & Total */}
+                    <div className="flex flex-wrap items-center gap-4">
                       <div
-                        className={`inline-flex items-center space-x-2 rounded-full px-3 py-1 text-sm font-medium ${statusInfo.color}`}
+                        className={`inline-flex items-center space-x-2 rounded-lg px-2.5 py-1 text-xs font-semibold ${statusInfo.color}`}
                       >
-                        <StatusIcon className="h-4 w-4" />
+                        <StatusIcon className="h-3.5 w-3.5" />
                         <span>{statusInfo.label}</span>
                       </div>
 
-                      {/* Total */}
                       <div className="text-right">
-                        <div className="text-sm text-gray-600">Total Belanja</div>
-                        <div className="font-bold text-primary">
+                        <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Total Belanja</span>
+                        <span className="text-sm font-bold text-slate-900">
                           {formatPrice(order.totalAmount)}
-                        </div>
+                        </span>
                       </div>
                     </div>
                   </div>
-
-                  {/* Payment Status */}
-                  {order.paymentStatus === "LUNAS" && (
-                    <div className="mt-3 inline-flex items-center space-x-1 text-sm text-green-600">
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Pembayaran Lunas</span>
-                    </div>
-                  )}
                 </Link>
               );
             })}
           </div>
         ) : (
-          <div className="rounded-lg bg-white p-12 text-center shadow-sm">
-            <Package className="mx-auto h-24 w-24 text-gray-400" />
-            <h2 className="mt-4 text-xl font-semibold text-gray-900">
-              Belum Ada Pesanan
-            </h2>
-            <p className="mt-2 text-gray-600">
-              Anda belum pernah melakukan pemesanan
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-16 text-center shadow-sm">
+            <Package className="mx-auto h-12 w-12 text-slate-300 stroke-[1.25]" />
+            <h3 className="mt-4 text-base font-semibold text-slate-900">Belum ada pesanan</h3>
+            <p className="mt-2 text-xs text-slate-500">
+              Keranjang belanja Anda kosong atau belum ada pembelian yang terekam.
             </p>
             <Link
               href="/products"
-              className="mt-6 inline-block rounded-lg bg-primary px-6 py-3 font-medium text-white hover:bg-primary/90"
+              className="mt-6 inline-flex rounded-xl bg-slate-900 px-5 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-700"
             >
-              Mulai Belanja
+              Belanja Sekarang
             </Link>
           </div>
         )}

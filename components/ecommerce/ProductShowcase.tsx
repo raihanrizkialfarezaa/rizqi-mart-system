@@ -19,6 +19,8 @@ export type SerializedProduct = {
     customerType: string;
     isActive: boolean;
   }[];
+  totalStock: number;
+  unitName: string;
 };
 
 type ProductShowcaseProps = {
@@ -102,7 +104,9 @@ export default function ProductShowcase({ initialProducts }: ProductShowcaseProp
               price={product.sellingPrices[0]?.price ?? 0}
               imageUrl={product.imageUrl ?? undefined}
               categoryName={product.category.name}
-              isAvailable={product.isActive}
+              isAvailable={product.isActive && product.totalStock > 0}
+              stockCount={product.totalStock}
+              unitName={product.unitName}
             />
           ))}
         </div>
