@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     // 2. Prepare sales order input
     const input: CreateSalesOrderInput = {
       channel: SalesChannel.ECOMMERCE,
-      orderType: OrderType.RETAIL,
+      orderType: OrderType.B2C_ECER,
       customerId: customer.id,
       deliveryMethod: deliveryMethod === "PICKUP" ? DeliveryMethod.PICKUP : DeliveryMethod.DELIVERY,
       deliveryAddressText: address ? `${address}${kecamatan ? `, Kecamatan ${kecamatan}` : ""}` : "Ambil di Toko (Pickup)",

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ShoppingCart, Package, Plus, Minus } from "lucide-react";
+import { ShoppingCart, Package, Plus, Minus, Zap } from "lucide-react";
 import { useCart } from "./CartContext";
 
 type ProductCardProps = {
@@ -129,7 +129,7 @@ export default function ProductCard({
               Stok: {stockCount}
             </span>
           ) : (
-            <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-extrabold text-rose-805 border border-rose-200 shadow-sm whitespace-nowrap">
+            <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-extrabold text-rose-800 border border-rose-200 shadow-sm whitespace-nowrap">
               Habis
             </span>
           )}
@@ -156,43 +156,56 @@ export default function ProductCard({
 
           {isAvailable ? (
             cartItem ? (
-              /* Shopee style inline quantity selector inside ProductCard */
+              /* Shopee style inline quantity selector inside ProductCard with Quick Buy Shortcut */
               <div 
-                className="flex items-center rounded-lg border border-slate-200 bg-slate-50/50 p-0.5"
+                className="flex flex-col gap-1.5 items-end"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                 }}
               >
-                <button
-                  onClick={handleDecrement}
-                  className="flex h-7 w-7 items-center justify-center rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 active:scale-90 transition-all"
-                  aria-label="Kurang"
-                >
-                  <Minus className="h-3 w-3" />
-                </button>
-                <input
-                  type="number"
-                  value={cartItem.quantity}
-                  onChange={handleInputChange}
+                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/50 p-0.5">
+                  <button
+                    onClick={handleDecrement}
+                    className="flex h-7 w-7 items-center justify-center rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 active:scale-90 transition-all"
+                    aria-label="Kurang"
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                  <input
+                    type="number"
+                    value={cartItem.quantity}
+                    onChange={handleInputChange}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent border-0 focus:outline-none focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <button
+                    onClick={handleIncrement}
+                    disabled={stockCount !== undefined && cartItem.quantity >= stockCount}
+                    className={`flex h-7 w-7 items-center justify-center rounded bg-white border text-slate-65 transition-all ${
+                      stockCount !== undefined && cartItem.quantity >= stockCount
+                        ? "border-slate-100 text-slate-300 cursor-not-allowed"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-100 active:scale-90"
+                    }`}
+                    aria-label="Tambah"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
+                {/* Quick Buy Checkout Shortcut */}
+                <Link
+                  href="/checkout"
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                   }}
-                  className="w-8 text-center text-xs font-bold text-slate-800 bg-transparent border-0 focus:outline-none focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <button
-                  onClick={handleIncrement}
-                  disabled={stockCount !== undefined && cartItem.quantity >= stockCount}
-                  className={`flex h-7 w-7 items-center justify-center rounded bg-white border text-slate-650 transition-all ${
-                    stockCount !== undefined && cartItem.quantity >= stockCount
-                      ? "border-slate-100 text-slate-300 cursor-not-allowed"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-100 active:scale-90"
-                  }`}
-                  aria-label="Tambah"
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-950 hover:bg-slate-900 px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider text-white active:scale-95 transition-all shadow-[0_0_12px_rgba(15,23,42,0.25)] hover:shadow-[0_0_18px_rgba(15,23,42,0.45)] border border-slate-800 w-full text-center animate-none"
                 >
-                  <Plus className="h-3 w-3" />
-                </button>
+                  <Zap className="h-3 w-3 fill-amber-400 text-amber-400 animate-pulse" />
+                  <span className="tracking-wide">Beli Langsung</span>
+                </Link>
               </div>
             ) : (
               <button
