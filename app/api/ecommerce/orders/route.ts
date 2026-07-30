@@ -14,6 +14,8 @@ export async function POST(req: NextRequest) {
       address,
       kecamatan,
       items,
+      customerNote,
+      discountAmount,
     } = body;
 
     if (!customerName || !phone) {
@@ -79,6 +81,8 @@ export async function POST(req: NextRequest) {
       deliveryAddressText: address ? `${address}${kecamatan ? `, Kecamatan ${kecamatan}` : ""}` : "Ambil di Toko (Pickup)",
       isFreeDelivery: true,
       entryMethod: "CUSTOMER_PORTAL",
+      customerNote: customerNote || undefined,
+      discountAmount: typeof discountAmount === "number" ? discountAmount : 0,
       items: resolvedItems,
       createdById: "admin_toko_cuid", // fallback to seed admin ID
     };

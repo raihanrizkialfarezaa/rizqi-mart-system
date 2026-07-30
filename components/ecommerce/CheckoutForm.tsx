@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, CreditCard, Package } from "lucide-react";
+import { MapPin, CreditCard, Package, FileText } from "lucide-react";
 
 type CheckoutFormProps = {
   subtotal: number;
+  initialNote?: string;
   onSubmit: (data: CheckoutFormData) => void;
 };
 
@@ -17,9 +18,10 @@ export type CheckoutFormData = {
   address?: string;
   kecamatan?: string;
   paymentMethod: "CASH" | "TRANSFER_BANK" | "QRIS";
+  customerNote?: string;
 };
 
-export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) {
+export default function CheckoutForm({ subtotal, initialNote = "", onSubmit }: CheckoutFormProps) {
   const [formData, setFormData] = useState<CheckoutFormData>({
     customerName: "",
     phone: "",
@@ -28,7 +30,14 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
     address: "",
     kecamatan: "",
     paymentMethod: "TRANSFER_BANK",
+    customerNote: initialNote,
   });
+
+  useEffect(() => {
+    if (initialNote && !formData.customerNote) {
+      setFormData((prev) => ({ ...prev, customerNote: initialNote }));
+    }
+  }, [initialNote]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -53,16 +62,16 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Customer Information */}
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="mb-4 flex items-center space-x-2 text-lg font-semibold">
-          <Package className="h-5 w-5 text-primary" />
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 flex items-center space-x-2 text-base font-bold text-slate-900">
+          <Package className="h-5 w-5 text-slate-700" />
           <span>Informasi Pembeli</span>
         </h2>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Nama Lengkap <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-slate-700">
+              Nama Lengkap <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
@@ -71,14 +80,14 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
               onChange={(e) =>
                 setFormData({ ...formData, customerName: e.target.value })
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-primary focus:outline-none"
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-800 focus:border-slate-400 focus:bg-white focus:outline-none"
               placeholder="Masukkan nama lengkap"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Nomor HP <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-slate-700">
+              Nomor HP / WhatsApp <span className="text-rose-500">*</span>
             </label>
             <input
               type="tel"
@@ -87,13 +96,13 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
               onChange={(e) =>
                 setFormData({ ...formData, phone: e.target.value })
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-primary focus:outline-none"
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-800 focus:border-slate-400 focus:bg-white focus:outline-none"
               placeholder="08123456789"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-xs font-semibold text-slate-700">
               Email (Opsional)
             </label>
             <input
@@ -102,7 +111,7 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
               onChange={(e) =>
                 setFormData({ ...formData, email: e.target.value })
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-primary focus:outline-none"
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-800 focus:border-slate-400 focus:bg-white focus:outline-none"
               placeholder="email@example.com"
             />
           </div>
@@ -110,14 +119,14 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
       </div>
 
       {/* Delivery Method */}
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="mb-4 flex items-center space-x-2 text-lg font-semibold">
-          <MapPin className="h-5 w-5 text-primary" />
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 flex items-center space-x-2 text-base font-bold text-slate-900">
+          <MapPin className="h-5 w-5 text-slate-700" />
           <span>Metode Pengiriman</span>
         </h2>
 
         <div className="space-y-3">
-          <label className="flex cursor-pointer items-center space-x-3 rounded-lg border-2 border-gray-200 p-4 hover:border-primary">
+          <label className="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200 p-4 hover:border-slate-400">
             <input
               type="radio"
               name="deliveryMethod"
@@ -129,17 +138,17 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                   deliveryMethod: e.target.value as "DELIVERY",
                 })
               }
-              className="h-4 w-4 text-primary"
+              className="h-4 w-4 text-slate-900"
             />
             <div className="flex-1">
-              <div className="font-medium">Dikirim ke Alamat</div>
-              <div className="text-sm text-gray-600">
+              <div className="font-bold text-xs text-slate-900">Dikirim ke Alamat</div>
+              <div className="text-[11px] text-slate-500">
                 Gratis ongkir area Mojokerto
               </div>
             </div>
           </label>
 
-          <label className="flex cursor-pointer items-center space-x-3 rounded-lg border-2 border-gray-200 p-4 hover:border-primary">
+          <label className="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200 p-4 hover:border-slate-400">
             <input
               type="radio"
               name="deliveryMethod"
@@ -151,12 +160,12 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                   deliveryMethod: e.target.value as "PICKUP",
                 })
               }
-              className="h-4 w-4 text-primary"
+              className="h-4 w-4 text-slate-900"
             />
             <div className="flex-1">
-              <div className="font-medium">Ambil di Toko</div>
-              <div className="text-sm text-gray-600">
-                Mojokerto, Jawa Timur
+              <div className="font-bold text-xs text-slate-900">Ambil di Toko</div>
+              <div className="text-[11px] text-slate-500">
+                Gudang & Toko Pusat Mojokerto
               </div>
             </div>
           </label>
@@ -164,10 +173,10 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
 
         {/* Address Fields (if delivery) */}
         {formData.deliveryMethod === "DELIVERY" && (
-          <div className="mt-4 space-y-4 border-t pt-4">
+          <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Alamat Lengkap <span className="text-red-500">*</span>
+              <label className="block text-xs font-semibold text-slate-700">
+                Alamat Lengkap <span className="text-rose-500">*</span>
               </label>
               <textarea
                 required
@@ -176,14 +185,14 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                   setFormData({ ...formData, address: e.target.value })
                 }
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-primary focus:outline-none"
-                placeholder="Jl. Contoh No. 123"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 focus:border-slate-400 focus:bg-white focus:outline-none"
+                placeholder="Jl. Gajah Mada No. 45..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Kecamatan <span className="text-red-500">*</span>
+              <label className="block text-xs font-semibold text-slate-700">
+                Kecamatan <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -192,7 +201,7 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                 onChange={(e) =>
                   setFormData({ ...formData, kecamatan: e.target.value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-primary focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-800 focus:border-slate-400 focus:bg-white focus:outline-none"
                 placeholder="Contoh: Prajurit Kulon"
               />
             </div>
@@ -200,15 +209,38 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
         )}
       </div>
 
+      {/* Customer Note */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 flex items-center space-x-2 text-base font-bold text-slate-900">
+          <FileText className="h-5 w-5 text-slate-700" />
+          <span>Catatan Pesanan / Pengiriman</span>
+        </h2>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            Catatan untuk Penjual atau Kurir (Opsional)
+          </label>
+          <textarea
+            value={formData.customerNote || ""}
+            onChange={(e) =>
+              setFormData({ ...formData, customerNote: e.target.value })
+            }
+            rows={2}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-slate-400 focus:bg-white focus:outline-none"
+            placeholder="Contoh: Titipkan ke satpam kompleks, tolong dipacking rapat..."
+          />
+        </div>
+      </div>
+
       {/* Payment Method */}
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="mb-4 flex items-center space-x-2 text-lg font-semibold">
-          <CreditCard className="h-5 w-5 text-primary" />
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 flex items-center space-x-2 text-base font-bold text-slate-900">
+          <CreditCard className="h-5 w-5 text-slate-700" />
           <span>Metode Pembayaran</span>
         </h2>
 
         <div className="space-y-3">
-          <label className="flex cursor-pointer items-center space-x-3 rounded-lg border-2 border-gray-200 p-4 hover:border-primary">
+          <label className="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200 p-4 hover:border-slate-400">
             <input
               type="radio"
               name="paymentMethod"
@@ -220,15 +252,15 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                   paymentMethod: e.target.value as "TRANSFER_BANK",
                 })
               }
-              className="h-4 w-4 text-primary"
+              className="h-4 w-4 text-slate-900"
             />
             <div className="flex-1">
-              <div className="font-medium">Transfer Bank</div>
-              <div className="text-sm text-gray-600">BCA, Mandiri, BNI</div>
+              <div className="font-bold text-xs text-slate-900">Transfer Bank</div>
+              <div className="text-[11px] text-slate-500">BCA, Mandiri, BNI</div>
             </div>
           </label>
 
-          <label className="flex cursor-pointer items-center space-x-3 rounded-lg border-2 border-gray-200 p-4 hover:border-primary">
+          <label className="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200 p-4 hover:border-slate-400">
             <input
               type="radio"
               name="paymentMethod"
@@ -240,15 +272,15 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                   paymentMethod: e.target.value as "QRIS",
                 })
               }
-              className="h-4 w-4 text-primary"
+              className="h-4 w-4 text-slate-900"
             />
             <div className="flex-1">
-              <div className="font-medium">QRIS</div>
-              <div className="text-sm text-gray-600">Scan & bayar</div>
+              <div className="font-bold text-xs text-slate-900">QRIS Instant</div>
+              <div className="text-[11px] text-slate-500">Scan & bayar dengan e-wallet</div>
             </div>
           </label>
 
-          <label className="flex cursor-pointer items-center space-x-3 rounded-lg border-2 border-gray-200 p-4 hover:border-primary">
+          <label className="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200 p-4 hover:border-slate-400">
             <input
               type="radio"
               name="paymentMethod"
@@ -260,12 +292,12 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
                   paymentMethod: e.target.value as "CASH",
                 })
               }
-              className="h-4 w-4 text-primary"
+              className="h-4 w-4 text-slate-900"
             />
             <div className="flex-1">
-              <div className="font-medium">Cash on Delivery</div>
-              <div className="text-sm text-gray-600">
-                Bayar saat barang diterima
+              <div className="font-bold text-xs text-slate-900">Cash on Delivery (COD)</div>
+              <div className="text-[11px] text-slate-500">
+                Bayar tunai saat barang tiba di lokasi
               </div>
             </div>
           </label>
@@ -276,9 +308,9 @@ export default function CheckoutForm({ subtotal, onSubmit }: CheckoutFormProps) 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full rounded-lg bg-primary px-6 py-4 text-lg font-medium text-white transition-colors hover:bg-primary/90 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        className="w-full rounded-xl bg-slate-900 py-4 text-sm font-bold text-white transition-all hover:bg-slate-800 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-md"
       >
-        {isSubmitting ? "Memproses..." : `Buat Pesanan - ${formatPrice(subtotal)}`}
+        {isSubmitting ? "Memproses Pesanan..." : `Konfirmasi & Buat Pesanan - ${formatPrice(subtotal)}`}
       </button>
     </form>
   );

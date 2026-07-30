@@ -39,6 +39,7 @@ export type CreateSalesOrderInput = {
   entryMethod?: "ADMIN_INPUT" | "CUSTOMER_PORTAL";
   dapurIdentityId?: string;
   customerNote?: string;
+  discountAmount?: number;
   items: Array<{
     productId: string;
     unitId: string;
@@ -86,6 +87,7 @@ export async function createSalesOrder(
     entryMethod,
     dapurIdentityId,
     customerNote,
+    discountAmount: inputDiscountAmount = 0,
     items,
     createdById,
   } = input;
@@ -344,8 +346,9 @@ export async function createSalesOrder(
     }
 
     // 3. Update order totals
-    const totalAmount = subtotal; // bisa dikurangi discount jika ada
-    const totalMargin = subtotal.minus(totalCost);
+    const discountDecimal = toDecimal(inputDiscountAmount || 0);
+    const totalAmount = Decimal.max(0, subtotal.minus(discountDecimal));
+    const totalMargin = totalAmount.minus(totalCost);
     const resolvedStatus = (orderType === "B2B_GROSIR" || allItemsAvailable)
       ? OrderStatus.MENUNGGU_KONFIRMASI
       : OrderStatus.DRAFT;
@@ -354,6 +357,7 @@ export async function createSalesOrder(
       where: { id: newOrder.id },
       data: {
         subtotal: subtotal.toNumber(),
+        discountAmount: discountDecimal.toNumber(),
         totalAmount: totalAmount.toNumber(),
         totalCostAmount: totalCost.toNumber(),
         totalMarginAmount: totalMargin.toNumber(),
