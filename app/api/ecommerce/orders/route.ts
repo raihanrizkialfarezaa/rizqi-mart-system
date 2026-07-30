@@ -18,25 +18,37 @@ export async function POST(req: NextRequest) {
       discountAmount,
     } = body;
 
-    if (!customerName || !phone) {
-      return NextResponse.json({ error: "Nama dan Nomor HP diperlukan" }, { status: 400 });
+    if (!customerName) {
+      return NextResponse.json({ error: "Nama pembeli diperlukan" }, { status: 400 });
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Minimal satu item diperlukan" }, { status: 400 });
     }
 
+    const cleanPhone = phone?.trim() || "";
+    const cleanEmail = email?.trim() || null;
+
     // 1. Find or create the Customer (B2C)
-    let customer = await prisma.customer.findFirst({
-      where: { phone: phone.trim() },
-    });
+    let customer = null;
+    if (cleanPhone) {
+      customer = await prisma.customer.findFirst({
+        where: { phone: cleanPhone },
+      });
+    }
+
+    if (!customer && cleanEmail) {
+      customer = await prisma.customer.findFirst({
+        where: { email: cleanEmail },
+      });
+    }
 
     if (!customer) {
       customer = await prisma.customer.create({
         data: {
           name: customerName.trim(),
-          phone: phone.trim(),
-          email: email?.trim() || null,
+          phone: cleanPhone || `NO_PHONE_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          email: cleanEmail,
         },
       });
     }

@@ -95,7 +95,11 @@ export default function Header() {
                   <User className="h-[18px] w-[18px]" />
                   <span>Pesanan</span>
                 </Link>
-                <div className="ml-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+                <Link
+                  href="/profile"
+                  className="ml-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 hover:bg-slate-100 transition-colors"
+                  title="Profil & Alamat Saya"
+                >
                   <div className="h-6 w-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-white">
                     {user.name.charAt(0).toUpperCase()}
                   </div>
@@ -103,13 +107,13 @@ export default function Header() {
                     {user.name}
                   </span>
                   <button
-                    onClick={() => logout()}
+                    onClick={(e) => { e.preventDefault(); logout(); }}
                     className="rounded p-0.5 text-slate-400 hover:text-slate-700 transition-colors"
                     title="Keluar"
                   >
                     <LogOut className="h-3.5 w-3.5" />
                   </button>
-                </div>
+                </Link>
               </>
             ) : (
               <Link
