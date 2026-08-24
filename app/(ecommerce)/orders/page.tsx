@@ -17,10 +17,6 @@ export default async function OrdersPage({
 }) {
   const user = await getSession();
 
-  if (!user) {
-    redirect("/sign-in");
-  }
-
   const sp = (await Promise.resolve(searchParams as any)) as SearchParams;
   const statusParam = sp?.status;
   const orderIdParam = sp?.orderId;

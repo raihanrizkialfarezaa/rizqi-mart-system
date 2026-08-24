@@ -36,6 +36,16 @@ export async function createSession(user: SessionUser): Promise<string> {
   return token;
 }
 
+export async function verifySessionToken(token?: string | null): Promise<SessionUser | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    return (payload.user as SessionUser) || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getSession(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
@@ -51,12 +61,7 @@ export async function getSession(): Promise<SessionUser | null> {
     return null;
   }
 
-  try {
-    const { payload } = await jwtVerify(token, SECRET);
-    return (payload.user as SessionUser) || null;
-  } catch {
-    return null;
-  }
+  return verifySessionToken(token);
 }
 
 export async function deleteSession() {
