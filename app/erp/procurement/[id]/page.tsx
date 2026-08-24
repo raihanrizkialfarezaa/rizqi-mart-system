@@ -109,9 +109,10 @@ async function getSourcingRequestData(id: string) {
 export default async function SourcingDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const req = await getSourcingRequestData(params.id);
+  const { id } = await params;
+  const req = await getSourcingRequestData(id);
   if (!req) notFound();
 
   const suppliers = await prisma.supplier.findMany({

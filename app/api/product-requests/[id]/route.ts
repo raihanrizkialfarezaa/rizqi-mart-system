@@ -3,14 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await req.json();
     const { action, reviewNotes } = body;
 
     const productRequest = await prisma.productRequest.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { dapurIdentity: { select: { institutionId: true } } },
     });
 
@@ -61,7 +62,7 @@ export async function PATCH(
       }
 
       await prisma.productRequest.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           status: "CONVERTED_TO_PRODUCT",
           reviewedBy: adminUser?.id,
@@ -82,7 +83,7 @@ export async function PATCH(
     if (action === "REJECT") {
       const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN_TOKO" } });
       await prisma.productRequest.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           status: "REJECTED",
           reviewedBy: adminUser?.id,

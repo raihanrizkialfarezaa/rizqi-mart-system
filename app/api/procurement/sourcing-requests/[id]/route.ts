@@ -4,16 +4,17 @@ import { getSession } from "@/lib/auth/session";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const raw = await prisma.sourcingRequest.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         product: { select: { name: true, sku: true } },
         unit: { select: { code: true, name: true } },

@@ -13,15 +13,14 @@ import {
   createTestSalesOrderStatusHistory,
 } from "../../fixtures/factories";
 import Decimal from "decimal.js";
-
-const {
+import {
   createSalesOrder,
   getSalesOrders,
   getSalesOrderById,
   updateOrderStatus,
   updateFulfillmentStatus,
   updatePaymentStatus,
-} = await import("@/lib/services/sales-order.service");
+} from "@/lib/services/sales-order.service";
 
 describe("Sales Order Service - /erp/orders page tests", () => {
   describe("getSalesOrders()", () => {

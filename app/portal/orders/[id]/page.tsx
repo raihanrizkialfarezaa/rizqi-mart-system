@@ -6,13 +6,15 @@ import PortalOrderDetailClient from "./client";
 export default async function PortalOrderDetail({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const identityId = cookies().get("dapur_identity")?.value;
+  const { id } = await params;
+  const cookieStore = await cookies();
+  const identityId = cookieStore.get("dapur_identity")?.value;
   if (!identityId) redirect("/portal");
 
   const order = await prisma.salesOrder.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       items: {
         select: {

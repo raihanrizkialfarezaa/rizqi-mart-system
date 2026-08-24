@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import PortalOrdersClient from "./client";
 
 export default async function PortalOrdersPage() {
-  const identityId = cookies().get("dapur_identity")?.value;
+  const cookieStore = await cookies();
+  const identityId = cookieStore.get("dapur_identity")?.value;
   if (!identityId) redirect("/portal");
 
   const identity = await prisma.dapurIdentity.findUnique({

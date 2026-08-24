@@ -114,7 +114,7 @@ export default function OrderBuilder() {
   }, [requestForm.name]);
 
   const searchRef = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     fetch("/api/institutions")

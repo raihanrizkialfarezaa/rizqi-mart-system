@@ -34,9 +34,10 @@ async function getOrderFromDb(id: string) {
 export default async function OrderDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const rawOrder = await getOrderFromDb(params.id);
+  const { id } = await params;
+  const rawOrder = await getOrderFromDb(id);
 
   if (!rawOrder) {
     notFound();

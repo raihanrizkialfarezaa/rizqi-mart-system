@@ -86,7 +86,7 @@ export async function createTestProduct(overrides: any = {}) {
 }
 
 // Stock Batch Factory
-export async function createTestStockBatch(productId: number, overrides: any = {}) {
+export async function createTestStockBatch(productId: string, overrides: any = {}) {
   return await prismaTest.stockBatch.create({
     data: {
       productId,
@@ -193,7 +193,7 @@ export async function createTestSalesOrder(overrides: any = {}) {
 }
 
 // Sales Order Item Factory
-export async function createTestSalesOrderItem(salesOrderId: number, productId: number, overrides: any = {}) {
+export async function createTestSalesOrderItem(salesOrderId: string, productId: string, overrides: any = {}) {
   let unitId = overrides.unitId;
 
   if (!unitId) {

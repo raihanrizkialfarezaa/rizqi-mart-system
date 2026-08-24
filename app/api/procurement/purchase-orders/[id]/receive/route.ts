@@ -4,9 +4,10 @@ import { receiveGoods, updateGoodsReceipt } from "@/lib/services/procurement.ser
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -20,7 +21,7 @@ export async function POST(
     }
 
     const receiptId = await receiveGoods({
-      purchaseOrderId: params.id,
+      purchaseOrderId: id,
       receivedById: session.id,
       items: items.map((i: any) => ({
         purchaseOrderItemId: i.purchaseOrderItemId,
@@ -41,7 +42,7 @@ export async function POST(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession();

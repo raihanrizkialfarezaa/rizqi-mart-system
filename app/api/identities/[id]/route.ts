@@ -3,11 +3,12 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const identity = await prisma.dapurIdentity.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         institution: {
           select: {
@@ -35,19 +36,20 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await req.json();
     const { displayName, description, primaryContact, contactPhone, contactEmail, deliveryAddress, isActive } = body;
 
-    const existing = await prisma.dapurIdentity.findUnique({ where: { id: params.id } });
+    const existing = await prisma.dapurIdentity.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Identity not found" }, { status: 404 });
     }
 
     const identity = await prisma.dapurIdentity.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(displayName !== undefined && { displayName }),
         ...(description !== undefined && { description }),
@@ -68,17 +70,18 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const existing = await prisma.dapurIdentity.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+    const existing = await prisma.dapurIdentity.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Identity not found" }, { status: 404 });
     }
 
     // Soft delete
     await prisma.dapurIdentity.update({
-      where: { id: params.id },
+      where: { id },
       data: { isActive: false },
     });
 

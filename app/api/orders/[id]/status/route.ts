@@ -10,9 +10,10 @@ import { prisma } from "@/lib/prisma";
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,7 +30,7 @@ export async function PATCH(
       );
     }
 
-    await updateOrderStatus(params.id, newStatus, session.id, note);
+    await updateOrderStatus(id, newStatus, session.id, note);
 
     return NextResponse.json({ success: true, status: newStatus });
   } catch (err) {

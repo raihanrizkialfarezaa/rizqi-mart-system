@@ -3,8 +3,7 @@ import type { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
 
 /**
- * Simple session-based middleware for testing/development.
- * Production: Replace with proper auth provider (Clerk, NextAuth, etc.)
+ * Proxy for Next.js 16 (replaces middleware.ts)
  */
 
 const publicPaths = [
@@ -15,7 +14,7 @@ const publicPaths = [
   "/api/webhooks",
 ];
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths
@@ -27,7 +26,6 @@ export async function middleware(request: NextRequest) {
   const session = await getSession();
 
   if (!session && (pathname.startsWith("/erp") || pathname.startsWith("/api"))) {
-    // Redirect to login page (to be created) or return 401
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

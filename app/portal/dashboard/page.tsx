@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import DapurDashboardClient from "./client";
 
 export default async function PortalDashboardPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const identityId = cookieStore.get("dapur_identity")?.value;
 
   if (!identityId) {

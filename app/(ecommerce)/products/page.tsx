@@ -98,17 +98,20 @@ async function getCategories() {
   });
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const [products, categories] = await Promise.all([
-    getProducts(searchParams),
+    getProducts(resolvedSearchParams),
     getCategories(),
   ]);
 
-  const selectedCategory = searchParams.category || "all";
+  const selectedCategory = resolvedSearchParams.category || "all";
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -170,11 +173,11 @@ export default async function ProductsPage({
         </div>
 
         {/* Search Query Notification */}
-        {searchParams.search && (
+        {resolvedSearchParams.search && (
           <div className="mb-8 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm flex items-center justify-between">
             <p className="text-[13px] text-slate-600">
               Menampilkan hasil pencarian untuk:{" "}
-              <span className="font-semibold text-slate-900">"{searchParams.search}"</span>
+              <span className="font-semibold text-slate-900">"{resolvedSearchParams.search}"</span>
             </p>
             <Link href="/products" className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 underline underline-offset-4">
               Hapus Pencarian

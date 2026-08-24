@@ -3,11 +3,12 @@ import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await prisma.notification.update({
-      where: { id: params.id },
+      where: { id },
       data: { isRead: true, readAt: new Date() },
     });
 

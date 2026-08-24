@@ -8,11 +8,12 @@ import { getSession } from "@/lib/auth/session";
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const order = await prisma.salesOrder.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         items: {
           include: {
@@ -52,15 +53,16 @@ export async function GET(
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     const body = await req.json();
     const { action, proofUrl } = body;
 
     const order = await prisma.salesOrder.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         payments: true,
       },
@@ -82,7 +84,7 @@ export async function PATCH(
 
       const updated = await prisma.$transaction(async (tx) => {
         const so = await tx.salesOrder.update({
-          where: { id: params.id },
+          where: { id },
           data: {
             status: "DIBATALKAN",
           },
@@ -90,7 +92,7 @@ export async function PATCH(
 
         await tx.salesOrderStatusHistory.create({
           data: {
-            salesOrderId: params.id,
+            salesOrderId: id,
             fromStatus: order.status,
             toStatus: "DIBATALKAN",
             changedById: userId,
@@ -115,7 +117,7 @@ export async function PATCH(
 
       const updated = await prisma.$transaction(async (tx) => {
         const so = await tx.salesOrder.update({
-          where: { id: params.id },
+          where: { id },
           data: {
             status: "SELESAI",
             fulfillmentStatus: "LENGKAP",
@@ -124,7 +126,7 @@ export async function PATCH(
 
         await tx.salesOrderStatusHistory.create({
           data: {
-            salesOrderId: params.id,
+            salesOrderId: id,
             fromStatus: order.status,
             toStatus: "SELESAI",
             changedById: userId,
@@ -170,7 +172,7 @@ export async function PATCH(
       }
 
       const updatedOrder = await prisma.salesOrder.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           paymentStatus: "MENUNGGU_VALIDASI",
         },

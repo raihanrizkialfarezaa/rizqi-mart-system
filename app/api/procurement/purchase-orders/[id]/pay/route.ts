@@ -5,9 +5,10 @@ import { uploadAttachment } from "@/lib/utils/cloudinary";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,7 +22,7 @@ export async function POST(
     }
 
     const po = await prisma.purchaseOrder.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!po) {
@@ -35,7 +36,7 @@ export async function POST(
       // proofFile is a base64 string
       const uploadResult = await uploadAttachment(proofFile, {
         ownerType: "PURCHASE_ORDER",
-        ownerId: params.id,
+        ownerId: id,
         fileName: proofFileName || `proof_${Date.now()}`,
       });
 
@@ -46,8 +47,8 @@ export async function POST(
         await prisma.attachment.create({
           data: {
             ownerType: "PURCHASE_ORDER",
-            ownerId: params.id,
-            fileName: proofFileName || `bukti_transfer_${params.id}.png`,
+            ownerId: id,
+            fileName: proofFileName || `bukti_transfer_${id}.png`,
             fileUrl: uploadResult.fileUrl,
             fileType: "IMAGE",
             mimeType: "image/png",
@@ -61,7 +62,7 @@ export async function POST(
 
     // Update Purchase Order
     const updatedPo = await prisma.purchaseOrder.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         paymentStatus: "LUNAS",
         paymentMethod,

@@ -21,11 +21,12 @@ export const dynamic = "force-dynamic";
 export default async function ErpOrderDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   let order;
   try {
-    order = await getSalesOrderById(params.id);
+    order = await getSalesOrderById(id);
   } catch {
     order = null;
   }

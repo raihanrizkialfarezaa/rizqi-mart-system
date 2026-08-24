@@ -4,9 +4,10 @@ import { getSession } from "@/lib/auth/session";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,7 +25,7 @@ export async function PATCH(
     } = body;
 
     const order = await prisma.salesOrder.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!order) {
@@ -33,7 +34,7 @@ export async function PATCH(
 
     // Update the order details
     const updated = await prisma.salesOrder.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(deliveryAddressText !== undefined && { deliveryAddressText }),
         ...(requestedDeliveryDate !== undefined && { requestedDeliveryDate: requestedDeliveryDate ? new Date(requestedDeliveryDate) : null }),
@@ -54,16 +55,17 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const order = await prisma.salesOrder.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!order) {
@@ -72,11 +74,11 @@ export async function DELETE(
 
     // Delete related records first
     await prisma.$transaction([
-      prisma.salesOrderItem.deleteMany({ where: { salesOrderId: params.id } }),
-      prisma.salesOrderStatusHistory.deleteMany({ where: { salesOrderId: params.id } }),
-      prisma.productRequest.deleteMany({ where: { salesOrderId: params.id } }),
-      prisma.notification.deleteMany({ where: { relatedOrderId: params.id } }),
-      prisma.salesOrder.delete({ where: { id: params.id } }),
+      prisma.salesOrderItem.deleteMany({ where: { salesOrderId: id } }),
+      prisma.salesOrderStatusHistory.deleteMany({ where: { salesOrderId: id } }),
+      prisma.productRequest.deleteMany({ where: { salesOrderId: id } }),
+      prisma.notification.deleteMany({ where: { relatedOrderId: id } }),
+      prisma.salesOrder.delete({ where: { id } }),
     ]);
 
     return NextResponse.json({ success: true });

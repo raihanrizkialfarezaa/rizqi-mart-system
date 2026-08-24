@@ -64,6 +64,28 @@ export type SalesOrderWithItems = Prisma.SalesOrderGetPayload<{
   };
 }>;
 
+export type SalesOrderDetail = Prisma.SalesOrderGetPayload<{
+  include: {
+    items: {
+      include: {
+        product: true;
+        unit: true;
+        sourcingRequest: true;
+      };
+    };
+    customer: true;
+    institution: true;
+    createdBy: true;
+    statusHistory: {
+      orderBy: { changedAt: "desc" };
+    };
+    deliveryNote: true;
+    invoice: true;
+    payments: true;
+    operationalCosts: true;
+  };
+}>;
+
 /**
  * Create new sales order dengan alokasi stok otomatis
  */
@@ -644,7 +666,7 @@ export async function updatePaymentStatus(
 /**
  * Get order by ID dengan semua relasi
  */
-export async function getSalesOrderById(orderId: string): Promise<SalesOrderWithItems | null> {
+export async function getSalesOrderById(orderId: string): Promise<SalesOrderDetail | null> {
   return prisma.salesOrder.findUnique({
     where: { id: orderId },
     include: {

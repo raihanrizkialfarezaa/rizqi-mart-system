@@ -4,9 +4,10 @@ import { validatePriceCeiling } from "@/lib/services/sales-order-calculations";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const { searchParams } = _req.nextUrl;
     const productId = searchParams.get("productId");
     const unitId = searchParams.get("unitId");
@@ -18,7 +19,7 @@ export async function GET(
 
     if (price) {
       const result = await validatePriceCeiling(
-        params.id,
+        id,
         productId,
         unitId,
         Number(price)
@@ -28,7 +29,7 @@ export async function GET(
 
     const agreement = await prisma.customerProductAgreement.findFirst({
       where: {
-        institutionId: params.id,
+        institutionId: id,
         productId,
         unitId,
         effectiveFrom: { lte: new Date() },
