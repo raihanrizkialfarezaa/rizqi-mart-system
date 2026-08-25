@@ -860,7 +860,7 @@ model Payment {
   status             PaymentStatus @default(BELUM_BAYAR)
   requiresValidation Boolean  @default(false)
   paidAt             DateTime?
-  proofFileUrl       String?
+  proofFileUrl       String?  @db.MediumText
   createdAt          DateTime @default(now())
 
   validation PaymentValidation?

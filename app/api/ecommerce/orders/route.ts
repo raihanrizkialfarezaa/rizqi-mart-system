@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSalesOrder, CreateSalesOrderInput } from "@/lib/services/sales-order.service";
-import { SalesChannel, OrderType, DeliveryMethod } from "@prisma/client";
+import { SalesChannel, OrderType, DeliveryMethod, PaymentMethod, PaymentStatus } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
       items,
       customerNote,
       discountAmount,
+      paymentMethod: rawPaymentMethod,
     } = body;
 
     if (!customerName) {
@@ -102,7 +103,46 @@ export async function POST(req: NextRequest) {
     // 3. Create sales order (triggers stock allocation)
     const order = await createSalesOrder(input);
 
-    return NextResponse.json({ success: true, data: order }, { status: 201 });
+    // 4. Create initial Payment row — critical for COD vs prepaid gating
+    //    - COD (CASH): starts BELUM_BAYAR, only admin/kurir can set LUNAS on cash collection (prevents user self-approval)
+    //    - TRANSFER_BANK / QRIS: starts BELUM_BAYAR, becomes MENUNGGU_VALIDASI after user uploads proof, then LUNAS after admin validation
+    //    This fixes legacy bug where paymentMethod was discarded and order stayed BELUM_BAYAR without Payment row.
+    try {
+      const methodRaw = String(rawPaymentMethod || "TRANSFER_BANK").toUpperCase();
+      const method: PaymentMethod =
+        methodRaw === "CASH" ? PaymentMethod.CASH : methodRaw === "QRIS" ? PaymentMethod.QRIS : PaymentMethod.TRANSFER_BANK;
+
+      const totalAmt = Number(order.totalAmount);
+      const CASHLESS_THRESHOLD = parseFloat(process.env.CASHLESS_VALIDATION_THRESHOLD || "500000");
+      const requiresValidation = (method === PaymentMethod.TRANSFER_BANK || method === PaymentMethod.QRIS) && totalAmt < CASHLESS_THRESHOLD;
+
+      // Always start BELUM_BAYAR for ecommerce (user must complete payment step); CASH COD will remain BELUM_BAYAR until courier confirms.
+      await prisma.payment.create({
+        data: {
+          paymentNumber: `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          salesOrderId: order.id,
+          method,
+          amount: totalAmt,
+          status: PaymentStatus.BELUM_BAYAR,
+          requiresValidation,
+        },
+      });
+      // Ensure SalesOrder.paymentStatus is in sync (createSalesOrder defaults to BELUM_BAYAR anyway)
+      if (order.paymentStatus !== PaymentStatus.BELUM_BAYAR) {
+        await prisma.salesOrder.update({ where: { id: order.id }, data: { paymentStatus: PaymentStatus.BELUM_BAYAR } });
+      }
+    } catch (payErr) {
+      console.error("[/api/ecommerce/orders] create payment failed (non-fatal):", payErr);
+      // Do not fail order creation if payment row fails — order is still valid, payment can be created later via admin panel
+    }
+
+    // Re-fetch order with payments for response consistency
+    const orderWithPayment = await prisma.salesOrder.findUnique({
+      where: { id: order.id },
+      include: { payments: true, items: { include: { product: true, unit: true } } },
+    });
+
+    return NextResponse.json({ success: true, data: orderWithPayment || order }, { status: 201 });
   } catch (error: any) {
     console.error("[/api/ecommerce/orders] Error:", error);
     return NextResponse.json({ error: error.message || "Gagal membuat pesanan" }, { status: 500 });

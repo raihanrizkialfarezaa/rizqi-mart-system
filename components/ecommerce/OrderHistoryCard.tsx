@@ -95,6 +95,10 @@ export default function OrderHistoryCard({
   const payMeta = paymentConfig[order.paymentStatus] || null;
   const isCancelled = order.status === "DIBATALKAN";
   const isDone = order.status === "SELESAI";
+  const isPaymentSettled = order.paymentStatus === "LUNAS";
+  const ELIGIBLE_STATUSES_FOR_RECEIVE = ["SIAP_KIRIM", "DALAM_PENGIRIMAN", "TERKIRIM_MENUNGGU_TTD"];
+  const canConfirmReceived = !isCancelled && !isDone && isPaymentSettled && ELIGIBLE_STATUSES_FOR_RECEIVE.includes(order.status);
+  const confirmBlockReason = isPaymentSettled ? null : order.paymentStatus === "MENUNGGU_VALIDASI" ? "Menunggu validasi admin" : "Selesaikan pembayaran dulu";
 
   const visibleItems = isExpanded ? order.items : order.items.slice(0, 2);
   const hiddenCount = order.items.length - visibleItems.length;
@@ -353,17 +357,23 @@ export default function OrderHistoryCard({
             Hubungi Penjual
           </a>
 
-          {!isCancelled && !isDone && (order.status === "DALAM_PENGIRIMAN" || order.status === "TERKIRIM_MENUNGGU_TTD" || order.status === "SIAP_KIRIM") && (
+          {canConfirmReceived ? (
             <button
               onClick={() => handleAction("MARK_RECEIVED")}
               disabled={!!isActionLoading}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
               type="button"
+              title="Konfirmasi setelah pembayaran Lunas & pesanan dikirim"
             >
               <CheckCircle2 className="h-4 w-4" />
               {isActionLoading === "RECEIVE" ? "Memproses..." : "Pesanan Diterima"}
             </button>
-          )}
+          ) : !isCancelled && !isDone && ["SIAP_KIRIM","DALAM_PENGIRIMAN","TERKIRIM_MENUNGGU_TTD"].includes(order.status) && !isPaymentSettled ? (
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800" title={confirmBlockReason ?? undefined}>
+              <Clock className="h-4 w-4" />
+              Menunggu pembayaran Lunas
+            </span>
+          ) : null}
 
           {!isCancelled && !isDone && (order.status === "DRAFT" || order.status === "MENUNGGU_KONFIRMASI") && (
             <>
